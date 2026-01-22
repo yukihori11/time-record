@@ -7,7 +7,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 // PUT /api/time-records/[id] - Update a time record
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -28,6 +28,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { id } = await params;
     const body = await request.json();
     const { startTime, stopTime, elapsedMs, status } = body;
 
@@ -39,7 +40,7 @@ export async function PUT(
         elapsed_ms: elapsedMs,
         status: status,
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id) // Ensure user can only update their own records
       .select()
       .single();
@@ -63,7 +64,7 @@ export async function PUT(
 // DELETE /api/time-records/[id] - Delete a time record
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -84,10 +85,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { id } = await params;
     const { error } = await supabase
       .from('time_records')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id); // Ensure user can only delete their own records
 
     if (error) {

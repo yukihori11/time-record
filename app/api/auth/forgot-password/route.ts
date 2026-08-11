@@ -20,8 +20,10 @@ export const POST = withLogging('auth.forgot-password.post', async (request: Req
 
     const supabase = await createServerSupabase();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      // サーバーでトークンを検証してからパスワード設定画面へ送る
-      redirectTo: `${siteUrl}/auth/confirm?next=/reset-password`,
+      // Supabase はトークンを URL のハッシュ（#access_token=...）で渡す。
+      // ハッシュはサーバーに届かないため、画面側で読む必要がある。
+      // /reset-password が読み取って処理する。
+      redirectTo: `${siteUrl}/reset-password`,
     });
 
     if (error) {

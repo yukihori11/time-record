@@ -14,25 +14,26 @@ import {
 
 const MIN_LENGTH = 8;
 
-type Phase = 'verifying' | 'ready' | 'invalid' | 'done';
+type Phase = 'checking' | 'ready' | 'invalid' | 'done';
 
 /**
- * 招待・パスワード再設定の画面。
+ * パスワードの再設定。
  *
- * Supabase のメールリンクには2つの形式がある:
- *   1. ?token_hash=...&type=invite  （現行。サーバーで verifyOtp する）
- *   2. #access_token=...            （旧形式。setSession で復元する）
+ * Supabase のメールリンクは、トークンを URL のハッシュ
+ * （#access_token=...&refresh_token=...）で渡してくる。
+ * ハッシュはサーバーに送られないため、ここで読み取って
+ * API に渡し、サーバー側でセッションを確立する。
  *
- * どちらで来ても設定できるよう両方を受ける。
+ * ログイン済みの人が自分でパスワードを変える場合は
+ * トークン無しでも使える。
  */
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [phase, setPhase] = useState<Phase>('verifying');
+  const [phase, setPhase] = useState<Phase>('checking');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [email, setEmail] = useState('');
   const [tokens, setTokens] = useState<{
     accessToken: string;
     refreshToken: string;
@@ -43,13 +44,16 @@ function ResetPasswordForm() {
 
   useEffect(() => {
     void (async () => {
-      const hash = window.location.hash.replace(/^#/, '');
-      const hashParams = new URLSearchParams(hash);
+      const hashParams = new URLSearchParams(
+        window.location.hash.replace(/^#/, '')
+      );
 
       // リンク自体がエラーを返している場合
-      const hashError = hashParams.get('error_description');
-      const queryError = searchParams.get('error_description');
-      if (hashError || queryError) {
+      const linkError =
+        hashParams.get('error_description') ??
+        searchParams.get('error_description');
+
+      if (linkError) {
         setInvalidReason(
           'リンクの有効期限が切れています。もう一度お試しください。'
         );
@@ -57,45 +61,26 @@ function ResetPasswordForm() {
         return;
       }
 
-      // 旧形式: ハッシュにトークンが入っている
       const accessToken = hashParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token');
+
       if (accessToken && refreshToken) {
         setTokens({ accessToken, refreshToken });
+        // トークンを URL に残さない
         window.history.replaceState(null, '', window.location.pathname);
         setPhase('ready');
         return;
       }
 
-      // 現行: クエリの token_hash をサーバーで検証してセッションを張る
-      const tokenHash = searchParams.get('token_hash');
-      const type = searchParams.get('type') ?? 'invite';
-
-      if (tokenHash) {
-        try {
-          const res = await api.post<{ email: string }>(
-            '/api/auth/verify-invite',
-            { tokenHash, type }
-          );
-          setEmail(res.email);
-          // トークンを URL に残さない
-          window.history.replaceState(null, '', window.location.pathname);
-          setPhase('ready');
-        } catch (err) {
-          setInvalidReason(errorMessage(err));
-          setPhase('invalid');
-        }
-        return;
-      }
-
-      // トークンが無い場合。既にログイン済みなら変更を許す
-      // （設定画面からパスワードを変えたい場合）
+      // トークンが無い。既にログインしていれば変更を許す
+      // （設定画面から自分で変えたい場合）
       try {
         await api.get('/api/me');
         setPhase('ready');
       } catch {
         setInvalidReason(
-          'このページはメールのリンクから開いてください。'
+          'このページはメールのリンクから開いてください。' +
+            'リンクが古い場合は、もう一度送信してください。'
         );
         setPhase('invalid');
       }
@@ -119,7 +104,6 @@ function ResetPasswordForm() {
     try {
       await api.post('/api/auth/reset-password', {
         password,
-        // 旧形式のトークンがあれば渡す
         ...(tokens ?? {}),
         fromResetLink: tokens !== null,
       });
@@ -138,21 +122,23 @@ function ResetPasswordForm() {
           <h1 className="text-2xl font-bold text-slate-900">
             パスワードの設定
           </h1>
-          {email && (
-            <p className="text-sm text-slate-600 mt-2 font-semibold">{email}</p>
-          )}
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 mt-2">
             {MIN_LENGTH}文字以上で設定してください
           </p>
         </div>
 
-        {phase === 'verifying' && <Spinner label="リンクを確認しています" />}
+        {phase === 'checking' && <Spinner label="リンクを確認しています" />}
 
         {phase === 'invalid' && (
           <div className="space-y-6">
             <ErrorBanner message={invalidReason} />
+            <Link href="/forgot-password" className="block">
+              <Button size="lg" fullWidth>
+                もう一度メールを送る
+              </Button>
+            </Link>
             <Link href="/login" className="block">
-              <Button variant="secondary" size="lg" fullWidth>
+              <Button variant="ghost" size="md" fullWidth>
                 ログイン画面へ
               </Button>
             </Link>
@@ -174,7 +160,7 @@ function ResetPasswordForm() {
           <form onSubmit={submit} className="space-y-4">
             <ErrorBanner message={error} />
 
-            <Field label="パスワード" required>
+            <Field label="新しいパスワード" required>
               <Input
                 type="password"
                 value={password}

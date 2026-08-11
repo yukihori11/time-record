@@ -15,20 +15,41 @@ export async function GET() {
     const { supabase, profile } = await requireUser();
 
     if (profile.role === 'admin') {
-      const { data, error } = await supabase
+      // invited_at / activated_at はマイグレーション 0020 で追加した列。
+      // 未適用の環境でも一覧が壊れないよう、失敗したら列なしで引き直す。
+      let rows: Record<string, unknown>[] | null = null;
+
+      const withInvite = await supabase
         .from('users')
-        .select('id, email, name, role, is_active')
+        .select('id, email, name, role, is_active, invited_at, activated_at')
         .order('name');
 
-      if (error) throw error;
+      if (withInvite.error) {
+        const fallback = await supabase
+          .from('users')
+          .select('id, email, name, role, is_active')
+          .order('name');
+
+        if (fallback.error) throw fallback.error;
+        rows = fallback.data;
+      } else {
+        rows = withInvite.data;
+      }
 
       return NextResponse.json({
-        users: (data ?? []).map((u) => ({
-          id: u.id,
-          email: u.email,
-          name: u.name ?? '',
-          role: u.role,
-          isActive: u.is_active,
+        users: (rows ?? []).map((u) => ({
+          id: u.id as string,
+          email: u.email as string,
+          name: (u.name as string) ?? '',
+          role: u.role as 'admin' | 'staff',
+          isActive: u.is_active as boolean,
+          invitedAt: (u.invited_at as string | null) ?? null,
+          // 列が無い環境では全員を利用中として扱う。
+          // 招待の区別ができないだけで、他の機能は動く。
+          activatedAt:
+            'activated_at' in u
+              ? ((u.activated_at as string | null) ?? null)
+              : new Date(0).toISOString(),
         })),
       });
     }

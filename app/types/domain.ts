@@ -12,6 +12,10 @@ export interface UserProfile {
   name: string;
   role: Role;
   isActive: boolean;
+  /** 招待メールを送った日時。null なら直接作成された */
+  invitedAt?: string | null;
+  /** 本人が初めてログインした日時。null なら招待中でまだ使っていない */
+  activatedAt?: string | null;
 }
 
 export interface HourlyWage {

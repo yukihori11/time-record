@@ -31,6 +31,7 @@ export default function SettingsView() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -96,6 +97,42 @@ export default function SettingsView() {
     }
   };
 
+  /** 招待メールを送り直す */
+  const resendInvite = async (userId: string) => {
+    setInviteBusyId(userId);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await api.post<{ message: string }>(
+        `/api/admin/users/${userId}/invite`
+      );
+      setSuccess(res.message);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setInviteBusyId(null);
+    }
+  };
+
+  /** 招待を取り消す（まだ使い始めていない人のみ） */
+  const cancelInvite = async (userId: string, label: string) => {
+    if (!window.confirm(`${label} への招待を取り消しますか？`)) return;
+
+    setInviteBusyId(userId);
+    setError(null);
+    setSuccess(null);
+    try {
+      await api.delete(`/api/admin/users/${userId}/invite`);
+      setSuccess('招待を取り消しました');
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setInviteBusyId(null);
+    }
+  };
+
   if (loading || !settings) return <Spinner />;
 
   // 設定変更の影響が分かるよう、具体例で金額を出す
@@ -112,6 +149,11 @@ export default function SettingsView() {
         : 0;
     return amountFromMinutes(Math.max(guaranteed, rounded), wage);
   };
+
+  // 招待メールを送っただけで、まだ本人がログインしていない人。
+  // 利用中の一覧に混ぜると「もう使えるのか」が分からなくなる。
+  const pendingUsers = users.filter((u) => !u.activatedAt);
+  const activeUsers = users.filter((u) => u.activatedAt);
 
   // 境界の前後が分かる例を並べる
   const threshold = settings.guaranteeThresholdMinutes;
@@ -274,51 +316,107 @@ export default function SettingsView() {
       {/* スタッフの追加 */}
       <InviteSection onInvited={load} />
 
-      {/* 権限 */}
+      {/* 招待中（まだログインしていない人） */}
+      {pendingUsers.length > 0 && (
+        <Card className="p-4">
+          <h2 className="font-bold text-slate-900 mb-1">招待中</h2>
+          <p className="text-xs text-slate-500 mb-3">
+            招待メールを送りましたが、まだログインされていません。
+          </p>
+
+          <ul className="space-y-2">
+            {pendingUsers.map((u) => (
+              <li
+                key={u.id}
+                className="p-2.5 rounded-xl bg-amber-50 border border-amber-200"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">
+                      {u.name || u.email}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">{u.email}</p>
+                  </div>
+                  <span className="shrink-0 text-xs font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700">
+                    {u.role === 'admin' ? '管理者' : 'バイト生'}
+                  </span>
+                </div>
+
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={inviteBusyId === u.id}
+                    onClick={() => resendInvite(u.id)}
+                  >
+                    再送する
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={inviteBusyId === u.id}
+                    onClick={() => cancelInvite(u.id, u.name || u.email)}
+                    className="text-red-500"
+                  >
+                    取り消す
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* 利用中 */}
       <Card className="p-4">
         <h2 className="font-bold text-slate-900 mb-3">スタッフと権限</h2>
-        <ul className="space-y-2">
-          {users.map((u) => (
-            <li
-              key={u.id}
-              className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-800 truncate">
-                  {u.name || u.email}
-                  {u.id === me?.id && (
-                    <span className="ml-1.5 text-xs text-blue-600">自分</span>
-                  )}
-                </p>
-                <p className="text-xs text-slate-400 truncate">{u.email}</p>
-              </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                <select
-                  value={u.role}
-                  onChange={(e) =>
-                    changeRole(u.id, e.target.value as 'admin' | 'staff')
-                  }
-                  className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white"
-                >
-                  <option value="staff">スタッフ</option>
-                  <option value="admin">管理者</option>
-                </select>
+        {activeUsers.length === 0 ? (
+          <p className="text-sm text-slate-400">利用中のスタッフはいません</p>
+        ) : (
+          <ul className="space-y-2">
+            {activeUsers.map((u) => (
+              <li
+                key={u.id}
+                className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">
+                    {u.name || u.email}
+                    {u.id === me?.id && (
+                      <span className="ml-1.5 text-xs text-blue-600">自分</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                </div>
 
-                <button
-                  onClick={() => toggleActive(u.id, !u.isActive)}
-                  className={`text-xs px-2 py-1.5 rounded-lg font-semibold ${
-                    u.isActive
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-slate-200 text-slate-500'
-                  }`}
-                >
-                  {u.isActive ? '有効' : '無効'}
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <select
+                    value={u.role}
+                    onChange={(e) =>
+                      changeRole(u.id, e.target.value as 'admin' | 'staff')
+                    }
+                    className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white"
+                  >
+                    <option value="staff">バイト生</option>
+                    <option value="admin">管理者</option>
+                  </select>
+
+                  <button
+                    onClick={() => toggleActive(u.id, !u.isActive)}
+                    className={`text-xs px-2 py-1.5 rounded-lg font-semibold ${
+                      u.isActive
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-slate-200 text-slate-500'
+                    }`}
+                  >
+                    {u.isActive ? '有効' : '無効'}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
     </div>
   );

@@ -73,15 +73,28 @@ export async function POST(request: Request) {
     // UPDATE だけだと対象0件でも成功扱いになり、権限が
     // 既定の staff のまま気づかず残ってしまう。
     if (data.user) {
-      const { error: profileError } = await admin.from('users').upsert(
-        {
-          id: data.user.id,
-          email,
-          name,
-          role,
-        },
-        { onConflict: 'id' }
-      );
+      const base = { id: data.user.id, email, name, role };
+
+      // invited_at / activated_at はマイグレーション 0020 の列。
+      // 未適用の環境では列なしで書き込む（招待の区別ができないだけ）。
+      let profileError = (
+        await admin.from('users').upsert(
+          {
+            ...base,
+            invited_at: new Date().toISOString(),
+            // 本人が初めてログインするまでは「招待中」。
+            // トリガー(handle_user_signin)が activated_at を埋める。
+            activated_at: null,
+          },
+          { onConflict: 'id' }
+        )
+      ).error;
+
+      if (profileError?.message.includes('invited_at')) {
+        profileError = (
+          await admin.from('users').upsert(base, { onConflict: 'id' })
+        ).error;
+      }
 
       if (profileError) {
         // 認証ユーザーだけ残ると次回の招待が

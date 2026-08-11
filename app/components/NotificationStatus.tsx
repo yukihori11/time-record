@@ -1,7 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { usePushNotification } from '@/app/hooks/usePushNotification';
 import { useInstallPrompt } from '@/app/hooks/useInstallPrompt';
 import Button from '@/app/components/ui/Button';
@@ -15,9 +13,6 @@ import { Card } from '@/app/components/ui/Feedback';
  * 未設定のときに「通知を有効にする」が2つ出ていた。
  */
 export default function NotificationStatus() {
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
-
   const {
     permission,
     subscribed,
@@ -76,31 +71,6 @@ export default function NotificationStatus() {
     };
   })();
 
-  /**
-   * 自分にテスト通知を送る。
-   *
-   * 「有効にしたのに届かない」ときの切り分けに使う。
-   * 端末は購読済みでもサーバーに登録が無い場合があり、
-   * その場合はここで気づける。
-   */
-  const sendTest = async () => {
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const res = await api.post<{ sent: number }>('/api/push/test');
-      setTestResult(
-        res.sent > 0
-          ? '送信しました。通知欄を確認してください'
-          : '送信先が見つかりません。一度解除して有効にし直してください'
-      );
-    } catch (err) {
-      setTestResult(errorMessage(err));
-    } finally {
-      setTesting(false);
-      setTimeout(() => setTestResult(null), 6000);
-    }
-  };
-
   const canToggle =
     permission !== 'unsupported' &&
     permission !== 'denied' &&
@@ -137,20 +107,6 @@ export default function NotificationStatus() {
           onClick={subscribed ? unsubscribe : subscribe}
         >
           {subscribed ? 'この端末で受け取らない' : '通知を有効にする'}
-        </Button>
-      )}
-
-      {/* 届かないときの確認用。テスト通知を自分に送る */}
-      {subscribed && (
-        <Button
-          size="md"
-          fullWidth
-          variant="ghost"
-          loading={testing}
-          className="mt-2"
-          onClick={sendTest}
-        >
-          {testResult ?? 'テスト通知を送る'}
         </Button>
       )}
 

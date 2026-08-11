@@ -29,10 +29,15 @@ export async function GET(request: Request) {
     const format = url.searchParams.get('format');
     const { from, to } = monthRange(month);
 
-    // 無効化したスタッフも含める。
-    // 月の途中で退職した人の未払い分が消えてしまうため。
+    // 給与の対象はバイト生のみ（管理者は時給を持たない）。
+    // 無効化した人も含める。月の途中で退職した場合に
+    // 未払い分が消えてしまうため。
     const [usersRes, sessionsRes, wagesRes, settingsRes] = await Promise.all([
-      supabase.from('users').select('id, name, email').order('name'),
+      supabase
+      .from('users')
+      .select('id, name, email')
+      .eq('role', 'staff')
+      .order('name'),
       supabase
         .from('work_sessions')
         .select(SESSION_SELECT)

@@ -271,6 +271,9 @@ export default function SettingsView() {
       {/* 予定の種別 */}
       <TypeSection types={types} onChanged={load} />
 
+      {/* スタッフの追加 */}
+      <InviteSection onInvited={load} />
+
       {/* 権限 */}
       <Card className="p-4">
         <h2 className="font-bold text-slate-900 mb-3">スタッフと権限</h2>
@@ -588,6 +591,81 @@ function TypeSection({
             追加
           </Button>
         </div>
+      </form>
+    </Card>
+  );
+}
+
+/**
+ * バイト生の招待。
+ *
+ * メールアドレスを入れると招待メールが飛び、
+ * 本人がリンクからパスワードを設定してログインする。
+ * こちらでパスワードを決めて伝える必要がない。
+ */
+function InviteSection({ onInvited }: { onInvited: () => void }) {
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const invite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setSending(true);
+
+    try {
+      const res = await api.post<{ message: string }>('/api/admin/users', {
+        email,
+        name,
+      });
+      setSuccess(res.message);
+      setEmail('');
+      setName('');
+      onInvited();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <h2 className="font-bold text-slate-900 mb-1">スタッフを追加</h2>
+      <p className="text-xs text-slate-500 mb-3">
+        招待メールが届き、本人がパスワードを設定してログインします。
+        追加後は時給の設定を忘れずに。
+      </p>
+
+      <ErrorBanner message={error} />
+      <SuccessBanner message={success} />
+
+      <form onSubmit={invite} className="space-y-3 mt-3">
+        <Field label="メールアドレス" required>
+          <Input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="staff@example.com"
+            inputMode="email"
+            required
+          />
+        </Field>
+
+        <Field label="氏名" hint="本人が後から変更できます">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="田中 太郎"
+          />
+        </Field>
+
+        <Button type="submit" fullWidth loading={sending} disabled={!email}>
+          招待メールを送る
+        </Button>
       </form>
     </Card>
   );

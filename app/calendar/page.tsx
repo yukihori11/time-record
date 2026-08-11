@@ -1,6 +1,6 @@
 import RoleGuard from '@/app/components/guards/RoleGuard';
 import AppHeader from '@/app/components/layout/AppHeader';
-import BottomNav from '@/app/components/layout/BottomNav';
+import AppShell from '@/app/components/layout/AppNav';
 import { getCalendarData } from '@/app/lib/server/queries';
 import { todayJst } from '@/app/lib/domain/datetime';
 import CalendarView from './CalendarView';
@@ -15,9 +15,10 @@ export default async function CalendarPage() {
 
   return (
     <RoleGuard>
-      <div className="min-h-dvh bg-slate-50 pb-20">
+      <AppShell>
         <AppHeader title="予約カレンダー" subtitle="宿泊状況とシフト" />
-        <main className="max-w-3xl mx-auto px-4 py-5">
+        {/* カレンダーは横幅があるほど見やすいので広めに取る */}
+        <main className="max-w-5xl mx-auto px-4 py-5">
           <CalendarView
             initialMonth={month}
             initialData={data}
@@ -25,8 +26,7 @@ export default async function CalendarPage() {
             isAdmin={data.isAdmin}
           />
         </main>
-      </div>
-      <BottomNav />
+      </AppShell>
     </RoleGuard>
   );
 }

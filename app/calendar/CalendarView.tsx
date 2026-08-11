@@ -149,6 +149,7 @@ export default function CalendarView({
           <CalendarGrid
             weeks={weeks}
             shifts={data.shifts}
+            users={data.users}
             onSelect={setSelectedDate}
             selectedDate={selectedDate}
           />

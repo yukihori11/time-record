@@ -43,7 +43,11 @@ async function loadDashboard() {
     typesRes,
     shiftsRes,
   ] = await Promise.all([
-    supabase.from('users').select('id, name, email').order('name'),
+    supabase
+      .from('users')
+      .select('id, name, email')
+      .eq('role', 'staff')
+      .order('name'),
     supabase
       .from('work_sessions')
       .select(SESSION_SELECT)

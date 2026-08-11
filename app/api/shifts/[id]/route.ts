@@ -37,11 +37,19 @@ export async function PATCH(request: Request, { params }: Params) {
     }
     if (body.note !== undefined) patch.note = optionalStr(body.note, 'メモ', 500);
     if (body.status !== undefined) {
-      patch.status = enumValue(body.status, 'status', [
+      const status = enumValue(body.status, 'status', [
         'assigned',
         'accepted',
         'declined',
       ] as const);
+      patch.status = status;
+
+      // 未回答に戻すときは、前回の回答の痕跡も消す。
+      // 残っていると「未回答なのに辞退理由がある」状態になる。
+      if (status === 'assigned') {
+        patch.responded_at = null;
+        patch.decline_reason = null;
+      }
     }
 
     const { data, error } = await supabase

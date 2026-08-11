@@ -2,6 +2,12 @@
 
 import { useAuth } from '@/app/contexts/AuthContext';
 
+/**
+ * 画面上部の見出し。
+ *
+ * ログアウトはスマホでのみここに出す。
+ * PCでは左サイドバーの下部にあるため重複させない。
+ */
 export default function AppHeader({
   title,
   subtitle,
@@ -31,7 +37,7 @@ export default function AppHeader({
           {user && (
             <button
               onClick={signOut}
-              className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5 rounded-lg hover:bg-slate-100"
+              className="md:hidden text-xs text-slate-500 hover:text-slate-700 px-2 py-1.5 rounded-lg hover:bg-slate-100"
             >
               ログアウト
             </button>

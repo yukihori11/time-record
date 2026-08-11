@@ -239,3 +239,47 @@ export function shiftSummary(shifts: Shift[]) {
     declined: shifts.filter((s) => s.status === 'declined').length,
   };
 }
+
+/** カレンダーのマスに出す、その日のシフト1件分 */
+export interface DayShiftLabel {
+  id: string;
+  name: string;
+  startTime: string | null;
+  status: Shift['status'];
+}
+
+/**
+ * 日付ごとのシフトを、表示用の名前つきで引けるようにする。
+ *
+ * 連泊でも担当者は日ごとに変わるため、帯ではなく
+ * 日付のマスに出す。
+ */
+export function shiftsByDate(
+  shifts: Shift[],
+  users: { id: string; name: string; email: string }[]
+): Map<string, DayShiftLabel[]> {
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  const result = new Map<string, DayShiftLabel[]>();
+
+  for (const s of shifts) {
+    const user = userMap.get(s.userId);
+    const label: DayShiftLabel = {
+      id: s.id,
+      // 表示は姓だけにして幅を稼ぐ（「田中 太郎」→「田中」）
+      name: (user?.name || user?.email || 'スタッフ').split(/[\s　]/)[0],
+      startTime: s.startTime,
+      status: s.status,
+    };
+
+    const list = result.get(s.shiftDate);
+    if (list) list.push(label);
+    else result.set(s.shiftDate, [label]);
+  }
+
+  // 入り時間の早い順に並べる
+  for (const list of result.values()) {
+    list.sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''));
+  }
+
+  return result;
+}

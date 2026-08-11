@@ -10,6 +10,7 @@ import {
   buildWeeks,
   isActiveOn,
   isCheckOutDay,
+  shiftsByDate,
   shiftSummary,
 } from './occupancy';
 
@@ -310,6 +311,78 @@ describe('buildDayDetail', () => {
     );
     expect(detail.reservations).toHaveLength(0);
     expect(detail.checkOuts).toHaveLength(1);
+  });
+});
+
+describe('shiftsByDate', () => {
+  const users = [
+    { id: 'U1', name: '田中 太郎', email: 't@example.com' },
+    { id: 'U2', name: '佐藤', email: 's@example.com' },
+  ];
+
+  const list: Shift[] = [
+    {
+      id: 'S1',
+      userId: 'U1',
+      propertyId: 'P1',
+      reservationId: null,
+      shiftDate: '2026-08-15',
+      startTime: '13:00',
+      endTime: null,
+      status: 'accepted',
+      respondedAt: null,
+    },
+    {
+      id: 'S2',
+      userId: 'U2',
+      propertyId: 'P1',
+      reservationId: null,
+      shiftDate: '2026-08-15',
+      startTime: '09:00',
+      endTime: null,
+      status: 'assigned',
+      respondedAt: null,
+    },
+    {
+      id: 'S3',
+      userId: 'U1',
+      propertyId: 'P1',
+      reservationId: null,
+      shiftDate: '2026-08-18',
+      startTime: '10:00',
+      endTime: null,
+      status: 'declined',
+      respondedAt: null,
+    },
+  ];
+
+  it('日付ごとにまとめる', () => {
+    const map = shiftsByDate(list, users);
+    expect(map.get('2026-08-15')).toHaveLength(2);
+    expect(map.get('2026-08-18')).toHaveLength(1);
+  });
+
+  it('狭い幅に収まるよう姓だけにする', () => {
+    const map = shiftsByDate(list, users);
+    const names = map.get('2026-08-15')!.map((s) => s.name);
+    expect(names).toContain('田中');
+    expect(names).not.toContain('田中 太郎');
+  });
+
+  it('入り時間の早い順に並べる', () => {
+    const map = shiftsByDate(list, users);
+    const times = map.get('2026-08-15')!.map((s) => s.startTime);
+    expect(times).toEqual(['09:00', '13:00']);
+  });
+
+  it('承諾状況を保持する', () => {
+    const map = shiftsByDate(list, users);
+    expect(map.get('2026-08-18')![0].status).toBe('declined');
+  });
+
+  it('該当ユーザーがいなくても落ちない', () => {
+    const map = shiftsByDate(list, []);
+    expect(map.get('2026-08-15')![0].name).toBe('スタッフ');
   });
 });
 

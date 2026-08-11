@@ -208,6 +208,41 @@ function ShiftSection({
     }
   };
 
+  /**
+   * シフトの取り消し。
+   *
+   * 辞退されたが代わりに入れる人がいない場合に、
+   * 予定そのものを消せるようにしておく。
+   */
+  const remove = async (shiftId: string) => {
+    if (!window.confirm('このシフトを取り消しますか？')) return;
+
+    setBusyId(shiftId);
+    setError(null);
+    try {
+      await api.delete(`/api/shifts/${shiftId}`);
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  /** 割り当て直す（未回答に戻す） */
+  const reset = async (shiftId: string) => {
+    setBusyId(shiftId);
+    setError(null);
+    try {
+      await api.patch(`/api/shifts/${shiftId}`, { status: 'assigned' });
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const pending = shifts.filter((s) => s.status === 'assigned').length;
   const declined = shifts.filter((s) => s.status === 'declined').length;
 
@@ -336,6 +371,31 @@ function ShiftSection({
                   <p className="text-xs text-red-500 mt-1.5">
                     理由: {shift.declineReason}
                   </p>
+                )}
+
+                {/* 管理者はシフトを取り消したり、割り当て直したりできる */}
+                {isAdmin && (
+                  <div className="flex gap-2 mt-2 pt-2 border-t border-slate-100">
+                    {shift.status === 'declined' && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        loading={busyId === shift.id}
+                        onClick={() => reset(shift.id)}
+                      >
+                        もう一度依頼する
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      loading={busyId === shift.id}
+                      onClick={() => remove(shift.id)}
+                      className="text-red-500"
+                    >
+                      このシフトを取り消す
+                    </Button>
+                  </div>
                 )}
               </li>
             );

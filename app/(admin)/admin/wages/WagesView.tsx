@@ -32,7 +32,10 @@ export default function WagesView() {
         api.get<{ users: UserProfile[] }>('/api/users'),
         api.get<{ wages: HourlyWage[] }>('/api/admin/wages'),
       ]);
-      setUsers(userRes.users.filter((u) => u.isActive));
+      // 時給を設定するのはバイト生のみ。管理者は対象外。
+      setUsers(
+        userRes.users.filter((u) => u.isActive && u.role === 'staff')
+      );
       setWages(wageRes.wages);
       setError(null);
     } catch (err) {

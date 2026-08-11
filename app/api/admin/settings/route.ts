@@ -46,6 +46,13 @@ export async function PATCH(request: Request) {
       }
       patch.rounding_minutes = minutes;
     }
+    if (body.guaranteeThresholdMinutes !== undefined) {
+      patch.guarantee_threshold_minutes = int(
+        body.guaranteeThresholdMinutes,
+        '保証の発動下限',
+        { min: 0, max: 1440 }
+      );
+    }
     if (body.minGuaranteedMinutes !== undefined) {
       patch.min_guaranteed_minutes = int(body.minGuaranteedMinutes, '最低保証', {
         min: 0,

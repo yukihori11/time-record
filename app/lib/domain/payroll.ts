@@ -12,23 +12,30 @@ import { actualWorkMs, totalBreakMs } from './worktime';
 /**
  * 給与計算の中核。
  *
- * ルール:
  *   実労働 = (退勤 − 出勤) − 休憩合計
- *   請求分 = max(最低保証, 15分単位に丸めた実労働)
- *   （最低保証の既定は1時間。1時間未満の勤務でも1時間分を支給する）
- *   金額   = 請求分(分) / 60 × 時給   ← 円未満は切り捨て
  *
- * 丸めと最低保証は「1日あたり」で適用する。
+ * 支給対象は実労働の長さで3段階に分かれる（既定値の場合）:
+ *
+ *   1時間15分以下  → 実時間どおり     （75分 = 1250円）
+ *   それを超える   → 2時間分を保証     （76分 = 2000円）
+ *   2時間を超える  → 実時間で計算      （130分 = 2250円）
+ *
+ * 「少しだけ超えた」場合に保証で下支えし、それ以上働いたら
+ * 実績どおりに払う形。境界は guaranteeThresholdMinutes で、
+ * この値を「超えた」ときに保証が発動する（ちょうどは発動しない）。
+ *
+ * 丸めと保証は「1日あたり」で適用する。
  * 1日に複数回出勤しても保証は1回だけ。
  *
- * max を分単位で取ってから時給を掛けることで、
- * 「保証額と実額をそれぞれ計算して比較」するより丸め誤差が出ない。
+ * 金額 = 支給対象(分) / 60 × 時給   ← 円未満は切り捨て
+ * 分単位で比較してから時給を掛けることで丸め誤差が出ない。
  */
 
 export const DEFAULT_SETTINGS: PayrollSettings = {
   roundingMode: 'up',
   roundingMinutes: 15,
-  minGuaranteedMinutes: 60,
+  guaranteeThresholdMinutes: 75,
+  minGuaranteedMinutes: 120,
 };
 
 /** 分と時給から金額を出す。円未満は切り捨て。 */
@@ -70,8 +77,12 @@ export function calcDailySalary(input: {
     settings.roundingMode
   );
 
-  // 一度も出勤していない日に保証を出さない
-  const guaranteed = workMs > 0 ? settings.minGuaranteedMinutes : 0;
+  // 保証が発動するのは「下限を超えた」場合のみ。
+  // 下限が75分なら、75分ちょうどは実時間どおり、76分から2時間分になる。
+  const exceedsThreshold = actualMinutes > settings.guaranteeThresholdMinutes;
+  const guaranteed =
+    workMs > 0 && exceedsThreshold ? settings.minGuaranteedMinutes : 0;
+
   const billed = Math.max(guaranteed, rounded);
 
   return {
@@ -81,7 +92,7 @@ export function calcDailySalary(input: {
     actualWorkMinutes: actualMinutes,
     roundedMinutes: rounded,
     billedMinutes: billed,
-    isGuaranteeApplied: workMs > 0 && guaranteed > rounded,
+    isGuaranteeApplied: guaranteed > rounded,
     breakMs,
     hourlyWage,
     amount: hourlyWage ? amountFromMinutes(billed, hourlyWage) : 0,

@@ -17,11 +17,12 @@ import { availableActions, deriveClockState } from './session-state';
 
 const NOW = new Date('2026-08-15T12:00:00+09:00');
 
-// 既定は「15分単位・切り上げ・最低保証1時間」
+// 既定は「15分単位・切り上げ・1時間15分を超えたら2時間分を保証」
 const SETTINGS: PayrollSettings = {
   roundingMode: 'up',
   roundingMinutes: 15,
-  minGuaranteedMinutes: 60,
+  guaranteeThresholdMinutes: 75,
+  minGuaranteedMinutes: 120,
 };
 
 function session(
@@ -204,19 +205,21 @@ describe('calcDailySalary', () => {
       now: NOW,
     });
 
-  it('40分の勤務でも最低保証で1時間分の1000円', () => {
+  // --- 保証の発動下限より下: 実時間どおり ---
+
+  it('30分は実時間どおり500円', () => {
     const r = daily([
       session({
         clockIn: new Date('2026-08-15T01:00:00Z'),
-        clockOut: new Date('2026-08-15T01:40:00Z'),
+        clockOut: new Date('2026-08-15T01:30:00Z'),
       }),
     ]);
-    expect(r.billedMinutes).toBe(60);
-    expect(r.isGuaranteeApplied).toBe(true);
-    expect(r.amount).toBe(1000);
+    expect(r.billedMinutes).toBe(30);
+    expect(r.isGuaranteeApplied).toBe(false);
+    expect(r.amount).toBe(500);
   });
 
-  it('1時間ちょうどは1000円（保証と同額）', () => {
+  it('1時間は実時間どおり1000円', () => {
     const r = daily([
       session({
         clockIn: new Date('2026-08-15T01:00:00Z'),
@@ -228,20 +231,45 @@ describe('calcDailySalary', () => {
     expect(r.amount).toBe(1000);
   });
 
-  it('1時間を超えたら実時間で計算する', () => {
-    // 1時間30分 → 保証を超えるので1500円
+  it('下限ちょうど(1時間15分)は保証を発動させない', () => {
+    const r = daily([
+      session({
+        clockIn: new Date('2026-08-15T01:00:00Z'),
+        clockOut: new Date('2026-08-15T02:15:00Z'),
+      }),
+    ]);
+    expect(r.billedMinutes).toBe(75);
+    expect(r.isGuaranteeApplied).toBe(false);
+    expect(r.amount).toBe(1250);
+  });
+
+  // --- 下限を超えたら保証が発動 ---
+
+  it('下限を1分でも超えたら2時間分の2000円', () => {
+    const r = daily([
+      session({
+        clockIn: new Date('2026-08-15T01:00:00Z'),
+        clockOut: new Date('2026-08-15T02:16:00Z'),
+      }),
+    ]);
+    expect(r.billedMinutes).toBe(120);
+    expect(r.isGuaranteeApplied).toBe(true);
+    expect(r.amount).toBe(2000);
+  });
+
+  it('1時間30分も保証で2000円', () => {
     const r = daily([
       session({
         clockIn: new Date('2026-08-15T01:00:00Z'),
         clockOut: new Date('2026-08-15T02:30:00Z'),
       }),
     ]);
-    expect(r.billedMinutes).toBe(90);
-    expect(r.isGuaranteeApplied).toBe(false);
-    expect(r.amount).toBe(1500);
+    expect(r.billedMinutes).toBe(120);
+    expect(r.isGuaranteeApplied).toBe(true);
+    expect(r.amount).toBe(2000);
   });
 
-  it('2時間ちょうどは2000円', () => {
+  it('2時間ちょうども2000円（保証と同額）', () => {
     const r = daily([
       session({
         clockIn: new Date('2026-08-15T01:00:00Z'),
@@ -249,8 +277,11 @@ describe('calcDailySalary', () => {
       }),
     ]);
     expect(r.billedMinutes).toBe(120);
+    expect(r.isGuaranteeApplied).toBe(false);
     expect(r.amount).toBe(2000);
   });
+
+  // --- 保証を超えたら実時間 ---
 
   it('2時間10分は切り上げで2時間15分 = 2250円', () => {
     const r = daily([
@@ -311,7 +342,7 @@ describe('calcDailySalary', () => {
     expect(r.amount).toBe(2000);
   });
 
-  it('30分ずつ2回でも保証は1回（1000円であって2000円ではない）', () => {
+  it('30分ずつ2回は合算して1時間。下限以下なので1000円', () => {
     const r = daily([
       session({
         id: 'S1',
@@ -326,7 +357,27 @@ describe('calcDailySalary', () => {
     ]);
     expect(r.actualWorkMs).toBe(3600_000);
     expect(r.billedMinutes).toBe(60);
+    expect(r.isGuaranteeApplied).toBe(false);
     expect(r.amount).toBe(1000);
+  });
+
+  it('保証は1日1回。朝夜1時間ずつでも4000円にはならない', () => {
+    const r = daily([
+      session({
+        id: 'S1',
+        clockIn: new Date('2026-08-15T01:00:00Z'),
+        clockOut: new Date('2026-08-15T02:00:00Z'),
+      }),
+      session({
+        id: 'S2',
+        clockIn: new Date('2026-08-15T09:00:00Z'),
+        clockOut: new Date('2026-08-15T10:30:00Z'),
+      }),
+    ]);
+    // 合計2時間30分 → 保証(120)より長いので実時間
+    expect(r.actualWorkMs).toBe(2.5 * 3600_000);
+    expect(r.billedMinutes).toBe(150);
+    expect(r.amount).toBe(2500);
   });
 
   it('勤務0分の日には保証を出さない', () => {

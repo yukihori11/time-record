@@ -105,9 +105,29 @@ export default function SettingsView() {
       settings.roundingMinutes,
       settings.roundingMode
     );
-    const billed = Math.max(settings.minGuaranteedMinutes, rounded);
-    return amountFromMinutes(billed, wage);
+    // 下限を「超えた」ときだけ保証が発動する
+    const guaranteed =
+      minutes > settings.guaranteeThresholdMinutes
+        ? settings.minGuaranteedMinutes
+        : 0;
+    return amountFromMinutes(Math.max(guaranteed, rounded), wage);
   };
+
+  // 境界の前後が分かる例を並べる
+  const threshold = settings.guaranteeThresholdMinutes;
+  const guarantee = settings.minGuaranteedMinutes;
+  const previewRows = Array.from(
+    new Set(
+      [
+        30,
+        threshold,
+        threshold + 1,
+        guarantee,
+        guarantee + 10,
+        guarantee + 60,
+      ].filter((m) => m > 0)
+    )
+  ).sort((a, b) => a - b);
 
   return (
     <div className="space-y-4">
@@ -156,8 +176,28 @@ export default function SettingsView() {
           </Field>
 
           <Field
-            label="最低保証時間（分）"
-            hint="1日あたり。短時間の勤務でもこの時間分は支給される"
+            label="保証が発動する時間（分）"
+            hint="この時間を「超えた」ら保証が付く。ちょうどの場合は実時間どおり"
+          >
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={1440}
+              step={15}
+              value={settings.guaranteeThresholdMinutes}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  guaranteeThresholdMinutes: Number(e.target.value),
+                })
+              }
+            />
+          </Field>
+
+          <Field
+            label="保証する時間（分）"
+            hint="発動したときに支給する時間。1日あたり1回だけ適用される"
           >
             <Input
               type="number"
@@ -182,17 +222,37 @@ export default function SettingsView() {
             時給1000円の場合の支給額
           </p>
           <ul className="space-y-1 text-sm">
-            {[80, 120, 130, 190, 310].map((minutes) => (
-              <li key={minutes} className="flex justify-between text-slate-600">
-                <span>
-                  {Math.floor(minutes / 60)}時間
-                  {minutes % 60 > 0 && `${minutes % 60}分`}
-                </span>
-                <span className="font-semibold tabular-nums">
-                  {formatYen(preview(minutes))}
-                </span>
-              </li>
-            ))}
+            {previewRows.map((minutes) => {
+              const applied = minutes > settings.guaranteeThresholdMinutes;
+              const rounded = roundMinutes(
+                minutes,
+                settings.roundingMinutes,
+                settings.roundingMode
+              );
+              const isGuarantee =
+                applied && settings.minGuaranteedMinutes > rounded;
+
+              return (
+                <li
+                  key={minutes}
+                  className="flex justify-between text-slate-600"
+                >
+                  <span>
+                    {Math.floor(minutes / 60) > 0 &&
+                      `${Math.floor(minutes / 60)}時間`}
+                    {minutes % 60 > 0 && `${minutes % 60}分`}
+                    {isGuarantee && (
+                      <span className="ml-1.5 text-xs text-emerald-600 font-semibold">
+                        保証
+                      </span>
+                    )}
+                  </span>
+                  <span className="font-semibold tabular-nums">
+                    {formatYen(preview(minutes))}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
 

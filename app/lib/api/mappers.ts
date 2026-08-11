@@ -67,6 +67,7 @@ export function toSettings(row: any): PayrollSettings {
   return {
     roundingMode: row.rounding_mode,
     roundingMinutes: row.rounding_minutes,
+    guaranteeThresholdMinutes: row.guarantee_threshold_minutes ?? 75,
     minGuaranteedMinutes: row.min_guaranteed_minutes,
   };
 }

@@ -52,6 +52,12 @@ export type RoundingMode = 'up' | 'down';
 export interface PayrollSettings {
   roundingMode: RoundingMode;
   roundingMinutes: number;
+  /**
+   * 保証が発動する下限（分）。この時間を「超えた」ら保証が付く。
+   * 60 なら、60分ちょうどは実時間どおり、61分から保証が発動する。
+   */
+  guaranteeThresholdMinutes: number;
+  /** 発動したときに支給する時間（分） */
   minGuaranteedMinutes: number;
 }
 

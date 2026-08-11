@@ -606,6 +606,7 @@ function TypeSection({
 function InviteSection({ onInvited }: { onInvited: () => void }) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  const [role, setRole] = useState<'staff' | 'admin'>('staff');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -620,10 +621,12 @@ function InviteSection({ onInvited }: { onInvited: () => void }) {
       const res = await api.post<{ message: string }>('/api/admin/users', {
         email,
         name,
+        role,
       });
       setSuccess(res.message);
       setEmail('');
       setName('');
+      setRole('staff');
       onInvited();
     } catch (err) {
       setError(errorMessage(err));
@@ -637,7 +640,7 @@ function InviteSection({ onInvited }: { onInvited: () => void }) {
       <h2 className="font-bold text-slate-900 mb-1">スタッフを追加</h2>
       <p className="text-xs text-slate-500 mb-3">
         招待メールが届き、本人がパスワードを設定してログインします。
-        追加後は時給の設定を忘れずに。
+        バイト生を追加したら時給の設定を忘れずに。
       </p>
 
       <ErrorBanner message={error} />
@@ -661,6 +664,23 @@ function InviteSection({ onInvited }: { onInvited: () => void }) {
             onChange={(e) => setName(e.target.value)}
             placeholder="田中 太郎"
           />
+        </Field>
+
+        <Field
+          label="権限"
+          hint={
+            role === 'admin'
+              ? '管理者はシフトの割当や給与の確認ができます。時給の設定は不要です'
+              : 'バイト生は打刻・給与確認・シフト回答ができます'
+          }
+        >
+          <Select
+            value={role}
+            onChange={(e) => setRole(e.target.value as 'staff' | 'admin')}
+          >
+            <option value="staff">バイト生</option>
+            <option value="admin">管理者</option>
+          </Select>
         </Field>
 
         <Button type="submit" fullWidth loading={sending} disabled={!email}>

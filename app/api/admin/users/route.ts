@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
 import { createAdminSupabase } from '@/app/lib/supabase/server';
-import { optionalStr, readBody, str } from '@/app/lib/api/validate';
+import { enumValue, optionalStr, readBody, str } from '@/app/lib/api/validate';
 
 /**
  * バイト生を追加する。
@@ -21,6 +21,10 @@ export async function POST(request: Request) {
     const body = await readBody(request);
     const email = str(body.email, 'メールアドレス', { max: 255 }).toLowerCase();
     const name = optionalStr(body.name, '氏名', 100) ?? '';
+    const role = enumValue(body.role ?? 'staff', '権限', [
+      'staff',
+      'admin',
+    ] as const);
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new ApiError('VALIDATION_ERROR', 'メールアドレスの形式が正しくありません');
@@ -57,15 +61,45 @@ export async function POST(request: Request) {
       throw new ApiError('VALIDATION_ERROR', error.message);
     }
 
-    // トリガーで users 行が作られるが、氏名を確実に入れておく
-    if (data.user && name) {
-      await admin.from('users').update({ name }).eq('id', data.user.id);
+    // 氏名と権限を設定する。
+    //
+    // role をここで直接書けるのは service_role キーだから。
+    // 招待された本人はまだログインしておらず RPC を通せないため、
+    // この経路に限って直接更新する。
+    // 呼び出し元が管理者であることは requireAdmin で確認済み。
+    //
+    // upsert にしているのは、auth.users のトリガーによる
+    // public.users の作成が万一走らなかった場合に備えるため。
+    // UPDATE だけだと対象0件でも成功扱いになり、権限が
+    // 既定の staff のまま気づかず残ってしまう。
+    if (data.user) {
+      const { error: profileError } = await admin.from('users').upsert(
+        {
+          id: data.user.id,
+          email,
+          name,
+          role,
+        },
+        { onConflict: 'id' }
+      );
+
+      if (profileError) {
+        // 認証ユーザーだけ残ると次回の招待が
+        // 「既に登録済み」で弾かれ、復旧できなくなる
+        await admin.auth.admin.deleteUser(data.user.id);
+        throw new ApiError(
+          'INTERNAL_ERROR',
+          `プロフィールの作成に失敗しました: ${profileError.message}`
+        );
+      }
     }
 
     return NextResponse.json(
       {
         ok: true,
-        message: `${email} に招待メールを送信しました`,
+        message: `${email} に招待メールを送信しました（${
+          role === 'admin' ? '管理者' : 'バイト生'
+        }）`,
       },
       { status: 201 }
     );

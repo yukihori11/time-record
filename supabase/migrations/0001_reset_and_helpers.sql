@@ -26,41 +26,10 @@ $$;
 -- ------------------------------------------------------------
 -- 管理者判定
 --
--- SECURITY DEFINER にすることで users テーブルの RLS を回避し、
--- RLS ポリシー内から呼んでも無限再帰しないようにする。
--- search_path 固定は権限昇格攻撃対策として必須。
--- STABLE にしないと行ごとに再評価されて極端に遅くなる。
+-- is_admin() と is_active_user() は users テーブルの列を参照するため、
+-- テーブルを作ったあとの 0002 で定義する。
+-- ここで定義すると role 列がまだ存在せずエラーになる。
 -- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.users
-    WHERE id = auth.uid()
-      AND role = 'admin'
-      AND is_active = true
-  );
-$$;
-
--- ------------------------------------------------------------
--- 有効なスタッフか（無効化された退職者を弾く）
--- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.is_active_user()
-RETURNS BOOLEAN
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.users
-    WHERE id = auth.uid() AND is_active = true
-  );
-$$;
 
 -- ------------------------------------------------------------
 -- JST の日付を返す

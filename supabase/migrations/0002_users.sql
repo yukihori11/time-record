@@ -20,6 +20,47 @@ ALTER TABLE public.users ALTER COLUMN name SET DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_users_role_active ON public.users(role, is_active);
 
+-- ------------------------------------------------------------
+-- 管理者判定
+--
+-- SECURITY DEFINER にすることで users テーブルの RLS を回避し、
+-- RLS ポリシー内から呼んでも無限再帰しないようにする。
+-- search_path 固定は権限昇格攻撃対策として必須。
+-- STABLE にしないと行ごとに再評価されて極端に遅くなる。
+--
+-- users テーブルの列を参照するため、テーブル作成後に定義する。
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid()
+      AND role = 'admin'
+      AND is_active = true
+  );
+$$;
+
+-- ------------------------------------------------------------
+-- 有効なスタッフか（無効化された退職者を弾く）
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.is_active_user()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.users
+    WHERE id = auth.uid() AND is_active = true
+  );
+$$;
+
 DROP TRIGGER IF EXISTS trg_users_updated_at ON public.users;
 CREATE TRIGGER trg_users_updated_at
   BEFORE UPDATE ON public.users

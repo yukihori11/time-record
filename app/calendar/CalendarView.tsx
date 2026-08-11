@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
+  DayActual,
+  MonthlyActualTotal,
   Property,
   Reservation,
   ReservationType,
@@ -10,6 +12,7 @@ import type {
 } from '@/app/types/domain';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { todayJst } from '@/app/lib/domain/datetime';
+import { formatDuration, formatYen } from '@/app/lib/domain/format';
 import { buildDayDetail, buildWeeks } from '@/app/lib/domain/occupancy';
 import MonthNav from '@/app/components/MonthNav';
 import { ErrorBanner, Spinner } from '@/app/components/ui/Feedback';
@@ -24,6 +27,9 @@ interface CalendarData {
   shifts: Shift[];
   types: ReservationType[];
   users: UserProfile[];
+  /** 日付ごとの実績（打刻の結果） */
+  actuals: Record<string, DayActual[]>;
+  monthlyTotal: MonthlyActualTotal;
 }
 
 interface Props {
@@ -124,6 +130,24 @@ export default function CalendarView({
         </div>
       )}
 
+      {/* 今月の実績。管理者は全員分、スタッフは自分の分 */}
+      {data.monthlyTotal.workMs > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs font-bold text-slate-500">
+              {isAdmin ? '今月の実績（全員）' : '今月の実績'}
+            </span>
+            <span className="text-xl font-bold text-blue-600 tabular-nums">
+              {formatYen(data.monthlyTotal.amount)}
+            </span>
+          </div>
+          <div className="flex gap-4 mt-1 text-xs text-slate-500">
+            <span>{data.monthlyTotal.days}日</span>
+            <span>{formatDuration(data.monthlyTotal.workMs)}</span>
+          </div>
+        </div>
+      )}
+
       {/* 種別の凡例 */}
       {data.types.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -150,6 +174,7 @@ export default function CalendarView({
             weeks={weeks}
             shifts={data.shifts}
             users={data.users}
+            actuals={data.actuals}
             onSelect={setSelectedDate}
             selectedDate={selectedDate}
           />
@@ -174,6 +199,7 @@ export default function CalendarView({
               users={data.users}
               currentUserId={currentUserId}
               isAdmin={isAdmin}
+              actuals={data.actuals[detail.date] ?? []}
               onChanged={() => load(month)}
               onEditReservation={(r) => {
                 setEditing(r);

@@ -164,6 +164,30 @@ export interface DailySalary {
   amount: number;
 }
 
+/**
+ * カレンダーに出す、その日その人の実績。
+ *
+ * シフトは「予定」だが、これは実際に打刻した結果。
+ * 予定と実績の差が管理者に見えるようにする。
+ */
+export interface DayActual {
+  userId: string;
+  actualWorkMs: number;
+  breakMs: number;
+  billedMinutes: number;
+  amount: number;
+  hourlyWage: number | null;
+  /** まだ退勤していない */
+  isWorking: boolean;
+  isGuaranteeApplied: boolean;
+}
+
+export interface MonthlyActualTotal {
+  workMs: number;
+  amount: number;
+  days: number;
+}
+
 export interface MonthlySalary {
   month: string; // YYYY-MM
   days: DailySalary[];

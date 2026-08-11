@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type {
+  DayActual,
   Property,
   Reservation,
   Shift,
@@ -9,6 +10,7 @@ import type {
 } from '@/app/types/domain';
 import type { DayDetailData } from '@/app/lib/domain/occupancy';
 import { formatDateJa } from '@/app/lib/domain/datetime';
+import { formatDuration, formatYen } from '@/app/lib/domain/format';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import Button from '@/app/components/ui/Button';
 import { Card, ErrorBanner } from '@/app/components/ui/Feedback';
@@ -20,6 +22,7 @@ export default function DayDetail({
   users,
   currentUserId,
   isAdmin,
+  actuals,
   onChanged,
   onEditReservation,
 }: {
@@ -28,6 +31,8 @@ export default function DayDetail({
   users: UserProfile[];
   currentUserId: string;
   isAdmin: boolean;
+  /** その日の実績（打刻の結果） */
+  actuals: DayActual[];
   onChanged: () => void;
   onEditReservation?: (reservation: Reservation) => void;
 }) {
@@ -158,6 +163,7 @@ export default function DayDetail({
         userMap={userMap}
         currentUserId={currentUserId}
         isAdmin={isAdmin}
+        actuals={actuals}
         onChanged={onChanged}
       />
     </Card>
@@ -170,6 +176,7 @@ function ShiftSection({
   userMap,
   currentUserId,
   isAdmin,
+  actuals,
   onChanged,
 }: {
   shifts: Shift[];
@@ -177,6 +184,7 @@ function ShiftSection({
   userMap: Map<string, UserProfile>;
   currentUserId: string;
   isAdmin: boolean;
+  actuals: DayActual[];
   onChanged: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -313,6 +321,64 @@ function ShiftSection({
                 {shift.note && (
                   <p className="text-xs text-slate-600 mt-1.5">{shift.note}</p>
                 )}
+
+                {/* 実績。打刻していれば予定の下に出す */}
+                {(() => {
+                  const actual = actuals.find((a) => a.userId === shift.userId);
+                  if (!actual) return null;
+
+                  // 金額は本人と管理者にだけ見せる
+                  const canSeeAmount = isAdmin || isMine;
+
+                  return (
+                    <div className="mt-2 px-2.5 py-2 rounded-lg bg-white border border-slate-200">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-slate-500">
+                          実績
+                          {actual.isWorking && (
+                            <span className="ml-1.5 text-emerald-600 font-bold">
+                              勤務中
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-sm font-bold text-slate-800 tabular-nums">
+                          {formatDuration(actual.actualWorkMs)}
+                        </span>
+                      </div>
+
+                      {actual.breakMs > 0 && (
+                        <div className="flex items-center justify-between gap-2 mt-0.5">
+                          <span className="text-xs text-slate-400">休憩</span>
+                          <span className="text-xs text-amber-600 tabular-nums">
+                            {formatDuration(actual.breakMs)}
+                          </span>
+                        </div>
+                      )}
+
+                      {canSeeAmount && actual.hourlyWage !== null && (
+                        <div className="flex items-center justify-between gap-2 mt-1 pt-1 border-t border-slate-100">
+                          <span className="text-xs text-slate-500">
+                            金額
+                            {actual.isGuaranteeApplied && (
+                              <span className="ml-1 text-emerald-600 font-semibold">
+                                保証
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-sm font-bold text-blue-600 tabular-nums">
+                            {formatYen(actual.amount)}
+                          </span>
+                        </div>
+                      )}
+
+                      {canSeeAmount && actual.hourlyWage === null && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          時給が未設定です
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {canRespond && decliningId !== shift.id && (
                   <div className="flex gap-2 mt-2.5">

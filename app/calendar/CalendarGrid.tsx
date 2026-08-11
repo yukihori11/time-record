@@ -1,9 +1,10 @@
 'use client';
 
-import type { UserProfile } from '@/app/types/domain';
+import type { DayActual, UserProfile } from '@/app/types/domain';
 import type { WeekRow } from '@/app/lib/domain/occupancy';
 import { shiftsByDate } from '@/app/lib/domain/occupancy';
 import { todayJst } from '@/app/lib/domain/datetime';
+import { formatDuration } from '@/app/lib/domain/format';
 import type { Shift } from '@/app/types/domain';
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
@@ -38,12 +39,15 @@ export default function CalendarGrid({
   weeks,
   shifts,
   users,
+  actuals,
   onSelect,
   selectedDate,
 }: {
   weeks: WeekRow[];
   shifts: Shift[];
   users: UserProfile[];
+  /** 日付ごとの実績。打刻した時間を出す */
+  actuals: Record<string, DayActual[]>;
   onSelect: (date: string) => void;
   selectedDate: string | null;
 }) {
@@ -130,9 +134,18 @@ export default function CalendarGrid({
               >
                 {week.days.map((date, di) => {
                   const dayShifts = date ? (shiftMap.get(date) ?? []) : [];
+                  const dayActuals = date ? (actuals[date] ?? []) : [];
+
                   return (
                     <div key={di} className="px-0.5 overflow-hidden">
-                      {dayShifts.slice(0, 3).map((s) => (
+                      {dayShifts.slice(0, 3).map((s) => {
+                        // 打刻済みなら実績時間を出す。
+                        // 予定（入り時間）より実績の方が知りたい情報のため。
+                        const actual = dayActuals.find(
+                          (a) => a.userId === s.userId
+                        );
+
+                        return (
                         <div
                           key={s.id}
                           className="flex items-center gap-0.5 leading-[14px]"
@@ -145,15 +158,29 @@ export default function CalendarGrid({
                             className={`text-[9px] font-semibold truncate ${STATUS_TEXT[s.status]}`}
                           >
                             {s.name}
-                            {s.startTime && (
-                              <span className="font-normal opacity-80">
+                            {actual ? (
+                              <span
+                                className={`font-normal ${
+                                  actual.isWorking
+                                    ? 'text-emerald-600'
+                                    : 'text-slate-500'
+                                }`}
+                              >
                                 {' '}
-                                {s.startTime}
+                                {formatDuration(actual.actualWorkMs)}
                               </span>
+                            ) : (
+                              s.startTime && (
+                                <span className="font-normal opacity-80">
+                                  {' '}
+                                  {s.startTime}
+                                </span>
+                              )
                             )}
                           </span>
                         </div>
-                      ))}
+                        );
+                      })}
                       {dayShifts.length > 3 && (
                         <div className="text-[9px] text-slate-400 leading-[14px] pl-1.5">
                           +{dayShifts.length - 3}

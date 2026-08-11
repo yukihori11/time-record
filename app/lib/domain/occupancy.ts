@@ -243,6 +243,7 @@ export function shiftSummary(shifts: Shift[]) {
 /** カレンダーのマスに出す、その日のシフト1件分 */
 export interface DayShiftLabel {
   id: string;
+  userId: string;
   name: string;
   startTime: string | null;
   status: Shift['status'];
@@ -265,6 +266,7 @@ export function shiftsByDate(
     const user = userMap.get(s.userId);
     const label: DayShiftLabel = {
       id: s.id,
+      userId: s.userId,
       // 表示は姓だけにして幅を稼ぐ（「田中 太郎」→「田中」）
       name: (user?.name || user?.email || 'スタッフ').split(/[\s　]/)[0],
       startTime: s.startTime,

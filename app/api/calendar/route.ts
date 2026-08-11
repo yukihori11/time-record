@@ -1,75 +1,24 @@
 import { NextResponse } from 'next/server';
-import { requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
-import {
-  toProperty,
-  toReservation,
-  toReservationType,
-  toShift,
-} from '@/app/lib/api/mappers';
 import { monthStr } from '@/app/lib/api/validate';
-import { monthRange } from '@/app/lib/domain/datetime';
+import { getCalendarData } from '@/app/lib/server/queries';
 
 /**
- * カレンダー画面に必要なデータを1回で返す。
+ * カレンダー画面のデータ。
  *
- * 予約・棟・シフト・スタッフ名を別々のAPIで取ると、
- * その回数だけ認証（Supabase認証サーバーへの往復）が発生する。
- * まとめることで認証1回・DBは並列4クエリで済む。
+ * 月を切り替えたときにクライアントから呼ばれる。
+ * 初期表示は Server Component が同じ関数を直接使うため、
+ * ここを経由しない（HTTPの往復が発生しない）。
  */
 export async function GET(request: Request) {
   try {
-    const { supabase, profile } = await requireUser();
-
     const url = new URL(request.url);
     const month = monthStr(url.searchParams.get('month'), 'month');
-    const { from, to } = monthRange(month);
 
-    const [reservationsRes, propertiesRes, shiftsRes, usersRes, typesRes] =
-      await Promise.all([
-        supabase
-          .from('reservations')
-          .select('*')
-          .eq('status', 'confirmed')
-          .lte('check_in', to)
-          .gte('check_out', from)
-          .order('check_in'),
-        supabase
-          .from('properties')
-          .select('*')
-          .eq('is_active', true)
-          .order('display_order'),
-        supabase
-          .from('shifts')
-          .select('*')
-          .gte('shift_date', from)
-          .lte('shift_date', to)
-          .order('shift_date'),
-        supabase.rpc('list_staff_names'),
-        supabase
-          .from('reservation_types')
-          .select('*')
-          .eq('is_active', true)
-          .order('display_order'),
-      ]);
+    // 認証・権限の判定は getCalendarData 内の requireUser が行う
+    const data = await getCalendarData(month);
 
-    if (reservationsRes.error) throw reservationsRes.error;
-
-    return NextResponse.json({
-      reservations: (reservationsRes.data ?? []).map(toReservation),
-      properties: (propertiesRes.data ?? []).map(toProperty),
-      shifts: (shiftsRes.data ?? []).map(toShift),
-      types: (typesRes.data ?? []).map(toReservationType),
-      users: (usersRes.data ?? []).map((u: { id: string; name: string }) => ({
-        id: u.id,
-        email: '',
-        name: u.name ?? '',
-        role: 'staff' as const,
-        isActive: true,
-      })),
-      currentUserId: profile.id,
-      isAdmin: profile.role === 'admin',
-    });
+    return NextResponse.json(data);
   } catch (error) {
     return errorResponse(error);
   }

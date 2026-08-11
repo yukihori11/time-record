@@ -2,6 +2,7 @@ import 'server-only';
 
 import { cache } from 'react';
 import type {
+  DayActual,
   MonthlySalary,
   Property,
   Reservation,
@@ -21,7 +22,12 @@ import {
   toShift,
   toWorkSession,
 } from '@/app/lib/api/mappers';
-import { calcMonthlySalary, DEFAULT_SETTINGS } from '@/app/lib/domain/payroll';
+import {
+  calcDailySalary,
+  calcMonthlySalary,
+  DEFAULT_SETTINGS,
+} from '@/app/lib/domain/payroll';
+import { resolveWage } from '@/app/lib/domain/wage-history';
 import { monthRange, todayJst } from '@/app/lib/domain/datetime';
 
 /**
@@ -115,8 +121,18 @@ export const getCalendarData = cache(async (month: string) => {
   const { supabase, profile } = await requireUser();
   const { from, to } = monthRange(month);
 
-  const [reservationsRes, propertiesRes, shiftsRes, usersRes, typesRes] =
-    await Promise.all([
+  const isAdmin = profile.role === 'admin';
+
+  const [
+    reservationsRes,
+    propertiesRes,
+    shiftsRes,
+    usersRes,
+    typesRes,
+    sessionsRes,
+    wagesRes,
+    settingsRes,
+  ] = await Promise.all([
       supabase
         .from('reservations')
         .select('*')
@@ -141,7 +157,81 @@ export const getCalendarData = cache(async (month: string) => {
         .select('*')
         .eq('is_active', true)
         .order('display_order'),
+
+      // 実績の稼働時間を出すための勤怠。
+      // 管理者は全員分、スタッフは自分の分だけ（RLSが絞る）。
+      supabase
+        .from('work_sessions')
+        .select(SESSION_SELECT)
+        .gte('work_date', from)
+        .lte('work_date', to),
+
+      // 金額の計算に使う。スタッフは自分の時給しか見えない。
+      supabase.from('hourly_wages').select('*').order('effective_from'),
+      supabase.from('app_settings').select('*').eq('id', 1).single(),
     ]);
+
+  const settings = settingsRes.data
+    ? toSettings(settingsRes.data)
+    : DEFAULT_SETTINGS;
+
+  const sessions = (sessionsRes.data ?? []).map(toWorkSession);
+  const wages = (wagesRes.data ?? []).map(toHourlyWage);
+
+  // 日付ごと・ユーザーごとに実績をまとめる。
+  // カレンダーの各日で「誰が何時間働いて、いくらか」を出すため。
+  const now = new Date();
+  const actuals: Record<string, DayActual[]> = {};
+
+  const byDateUser = new Map<string, WorkSession[]>();
+  for (const s of sessions) {
+    const key = `${s.workDate}|${s.userId}`;
+    const list = byDateUser.get(key);
+    if (list) list.push(s);
+    else byDateUser.set(key, [s]);
+  }
+
+  for (const [key, list] of byDateUser) {
+    const [workDate, userId] = key.split('|');
+    const wage = resolveWage(
+      wages.filter((w) => w.userId === userId),
+      workDate
+    );
+
+    const daily = calcDailySalary({
+      workDate,
+      sessions: list,
+      hourlyWage: wage,
+      settings,
+      now,
+    });
+
+    const entry: DayActual = {
+      userId,
+      actualWorkMs: daily.actualWorkMs,
+      breakMs: daily.breakMs,
+      billedMinutes: daily.billedMinutes,
+      amount: daily.amount,
+      hourlyWage: wage,
+      isWorking: list.some((s) => s.clockOut === null),
+      isGuaranteeApplied: daily.isGuaranteeApplied,
+    };
+
+    if (actuals[workDate]) actuals[workDate].push(entry);
+    else actuals[workDate] = [entry];
+  }
+
+  // 当月の合計。管理者は全員分、スタッフは自分の分。
+  const monthlyTotal = Object.values(actuals)
+    .flat()
+    .reduce(
+      (acc, a) => ({
+        workMs: acc.workMs + a.actualWorkMs,
+        amount: acc.amount + a.amount,
+        days: acc.days,
+      }),
+      { workMs: 0, amount: 0, days: Object.keys(actuals).length }
+    );
 
   return {
     reservations: (reservationsRes.data ?? []).map(toReservation) as Reservation[],
@@ -157,8 +247,10 @@ export const getCalendarData = cache(async (month: string) => {
         isActive: true,
       })
     ),
+    actuals,
+    monthlyTotal,
     currentUserId: profile.id,
-    isAdmin: profile.role === 'admin',
+    isAdmin,
   };
 });
 

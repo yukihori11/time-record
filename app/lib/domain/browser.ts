@@ -46,3 +46,30 @@ export function notificationStep(input: {
   if (isIos && !input.isStandalone) return 'need-install';
   return 'ready';
 }
+
+/**
+ * 通知に対応しているかの判定。
+ *
+ * iOS Safari はホーム画面に追加するまで PushManager が存在しない。
+ * そのため API の有無だけで判定すると「非対応」と誤って表示される。
+ * 実際には追加すれば使えるので、iOS は別扱いにする。
+ */
+export function isPushSupported(input: {
+  userAgent: string;
+  hasServiceWorker: boolean;
+  hasPushManager: boolean;
+  hasNotification: boolean;
+}): boolean {
+  const { isIos, isIosNonSafari } = detectBrowser(input.userAgent);
+
+  // iOS の Safari 以外は、ホーム画面に追加できないため使えない
+  if (isIosNonSafari) return false;
+
+  // iOS Safari は追加前に PushManager が無い。
+  // Service Worker があれば「追加すれば使える」とみなす。
+  if (isIos) return input.hasServiceWorker;
+
+  return (
+    input.hasServiceWorker && input.hasPushManager && input.hasNotification
+  );
+}

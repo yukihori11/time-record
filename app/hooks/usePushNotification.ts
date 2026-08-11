@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/app/lib/client/fetcher';
-import { detectBrowser } from '@/app/lib/domain/browser';
+import { detectBrowser, isPushSupported } from '@/app/lib/domain/browser';
 
 type PermissionState = 'unsupported' | 'default' | 'granted' | 'denied';
 
@@ -40,15 +40,22 @@ export function usePushNotification() {
   const [isIosNonSafari, setIsIosNonSafari] = useState(false);
 
   useEffect(() => {
-    const supported =
-      'serviceWorker' in navigator &&
-      'PushManager' in window &&
-      'Notification' in window;
+    // iOS Safari はホーム画面に追加するまで PushManager を持たない。
+    // API の有無だけで判定すると誤って「非対応」になる。
+    const supported = isPushSupported({
+      userAgent: navigator.userAgent,
+      hasServiceWorker: 'serviceWorker' in navigator,
+      hasPushManager: 'PushManager' in window,
+      hasNotification: 'Notification' in window,
+    });
 
     if (!supported) {
       setPermission('unsupported');
-    } else {
+    } else if ('Notification' in window) {
       setPermission(Notification.permission as PermissionState);
+    } else {
+      // iOS Safari の追加前。まだ許可を求められる状態ではない
+      setPermission('default');
     }
 
     // ホーム画面から起動しているか
@@ -77,6 +84,13 @@ export function usePushNotification() {
   const subscribe = useCallback(async (): Promise<boolean> => {
     setBusy(true);
     try {
+      // iOS Safari はホーム画面に追加するまで Notification を持たない。
+      // ここに来る前に案内を出しているが、念のため守る。
+      if (!('Notification' in window)) {
+        console.warn('[push] この状態では通知を許可できません');
+        return false;
+      }
+
       const result = await Notification.requestPermission();
       setPermission(result as PermissionState);
       if (result !== 'granted') return false;

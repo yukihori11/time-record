@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { detectBrowser, notificationStep } from './browser';
+import {
+  detectBrowser,
+  isPushSupported,
+  notificationStep,
+} from './browser';
 
 // 実際のブラウザが送る User-Agent
 const UA = {
@@ -81,5 +85,75 @@ describe('notificationStep', () => {
     expect(
       notificationStep({ userAgent: UA.iphoneChrome, isStandalone: false })
     ).not.toBe('need-install');
+  });
+});
+
+describe('isPushSupported', () => {
+  // iOS Safari はホーム画面に追加するまで PushManager を持たない
+  const iosSafariBeforeInstall = {
+    userAgent: UA.iphoneSafari,
+    hasServiceWorker: true,
+    hasPushManager: false,
+    hasNotification: false,
+  };
+
+  it('iPhone Safari は追加前でも対応扱いにする', () => {
+    // ここを false にすると「非対応」と誤表示される
+    expect(isPushSupported(iosSafariBeforeInstall)).toBe(true);
+  });
+
+  it('iPhone Safari で追加後はもちろん対応', () => {
+    expect(
+      isPushSupported({
+        userAgent: UA.iphoneSafari,
+        hasServiceWorker: true,
+        hasPushManager: true,
+        hasNotification: true,
+      })
+    ).toBe(true);
+  });
+
+  it('iPhone Chrome は対応しない', () => {
+    expect(
+      isPushSupported({
+        userAgent: UA.iphoneChrome,
+        hasServiceWorker: true,
+        hasPushManager: true,
+        hasNotification: true,
+      })
+    ).toBe(false);
+  });
+
+  it('Android Chrome は API が揃っていれば対応', () => {
+    expect(
+      isPushSupported({
+        userAgent: UA.androidChrome,
+        hasServiceWorker: true,
+        hasPushManager: true,
+        hasNotification: true,
+      })
+    ).toBe(true);
+  });
+
+  it('PC で API が無ければ非対応', () => {
+    expect(
+      isPushSupported({
+        userAgent: UA.desktopChrome,
+        hasServiceWorker: false,
+        hasPushManager: false,
+        hasNotification: false,
+      })
+    ).toBe(false);
+  });
+
+  it('Service Worker が無い iOS は非対応', () => {
+    expect(
+      isPushSupported({
+        userAgent: UA.iphoneSafari,
+        hasServiceWorker: false,
+        hasPushManager: false,
+        hasNotification: false,
+      })
+    ).toBe(false);
   });
 });

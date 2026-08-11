@@ -1,16 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { useClockStatus } from '@/app/hooks/useClockStatus';
+import type { PayrollSettings, Property } from '@/app/types/domain';
+import {
+  useClockStatus,
+  type SerializedSession,
+} from '@/app/hooks/useClockStatus';
 import { useElapsed } from '@/app/hooks/useElapsed';
 import { availableActions, stateLabel } from '@/app/lib/domain/session-state';
 import { formatClock, formatDuration, formatYen } from '@/app/lib/domain/format';
 import { toJstTimeString } from '@/app/lib/domain/datetime';
 import { amountFromMinutes } from '@/app/lib/domain/payroll';
 import { roundMinutes } from '@/app/lib/domain/rounding';
-import { useAuth } from '@/app/contexts/AuthContext';
 import Button from '@/app/components/ui/Button';
-import { Card, ErrorBanner, Spinner } from '@/app/components/ui/Feedback';
+import { Card, ErrorBanner } from '@/app/components/ui/Feedback';
 import { Select } from '@/app/components/ui/Field';
 
 const STATE_STYLES = {
@@ -19,28 +22,31 @@ const STATE_STYLES = {
   on_break: 'bg-amber-100 text-amber-700',
 } as const;
 
-export default function ClockPanel() {
-  const {
-    state,
-    session,
-    properties,
-    loading,
-    punching,
-    error,
-    punch,
-    clockOffset,
-  } = useClockStatus();
-  const { currentWage, settings } = useAuth();
+interface Props {
+  initialSession: SerializedSession | null;
+  initialProperties: Property[];
+  settings: PayrollSettings;
+  currentWage: number | null;
+  serverNow: string;
+}
+
+export default function ClockPanel({
+  initialSession,
+  initialProperties,
+  settings,
+  currentWage,
+  serverNow,
+}: Props) {
+  // 初期値はサーバーで取得済み。マウント時の再取得は行わない。
+  const { state, session, properties, punching, error, punch, clockOffset } =
+    useClockStatus({ initialSession, initialProperties, serverNow });
+
   const [propertyId, setPropertyId] = useState<string>('');
   const [confirmingOut, setConfirmingOut] = useState(false);
 
   // 端末の時計がズレていても正しい経過時間を出すため offset を渡す
   const { workMs, breakMs } = useElapsed(session, clockOffset);
   const actions = availableActions(state);
-
-  if (loading) {
-    return <Spinner label="状態を確認しています" />;
-  }
 
   // 今の時点で確定している金額の目安
   const previewAmount = (() => {

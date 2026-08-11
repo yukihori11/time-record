@@ -5,13 +5,7 @@ import type { ClockState, Property, WorkSession } from '@/app/types/domain';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { deriveClockState } from '@/app/lib/domain/session-state';
 
-interface StatusResponse {
-  session: SerializedSession | null;
-  properties: Property[];
-  serverNow: string;
-}
-
-interface SerializedSession
+export interface SerializedSession
   extends Omit<WorkSession, 'clockIn' | 'clockOut' | 'breaks' | 'editedAt'> {
   clockIn: string;
   clockOut: string | null;
@@ -22,6 +16,12 @@ interface SerializedSession
     breakStart: string;
     breakEnd: string | null;
   }[];
+}
+
+interface StatusResponse {
+  session: SerializedSession | null;
+  properties: Property[];
+  serverNow: string;
 }
 
 function parseSession(raw: SerializedSession | null): WorkSession | null {
@@ -46,27 +46,41 @@ export type PunchAction =
   | 'break_start'
   | 'break_end';
 
+interface Options {
+  initialSession: SerializedSession | null;
+  initialProperties: Property[];
+  serverNow: string;
+}
+
 /**
- * 打刻状態を DB から取得・維持する。
+ * 打刻状態を維持する。
  *
- * 再取得のきっかけを4つ張るのが要点:
- *   - マウント時
+ * 初期値はサーバー側で取得済みのものを受け取るため、
+ * マウント直後の取得は行わない（画面が出た時点で表示が完成している）。
+ *
+ * その後の再取得のきっかけは3つ:
  *   - visibilitychange（iOS Safari はタブを破棄するのでこれが最重要）
  *   - focus（別ウィンドウから戻ったとき）
  *   - online（通信復帰）
  *
- * さらに60秒ごとのポーリングで、別端末での打刻も追従する。
+ * 加えて勤務中のみ60秒ごとに追従する。未出勤時は無駄なので止める。
  */
-export function useClockStatus() {
-  const [session, setSession] = useState<WorkSession | null>(null);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true);
+export function useClockStatus({
+  initialSession,
+  initialProperties,
+  serverNow,
+}: Options) {
+  const [session, setSession] = useState<WorkSession | null>(() =>
+    parseSession(initialSession)
+  );
+  const [properties, setProperties] = useState<Property[]>(initialProperties);
   const [punching, setPunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // サーバーとクライアントの時計のズレ。表示の補正に使う。
-  // 描画に影響するので ref ではなく state で持つ。
-  const [clockOffset, setClockOffset] = useState(0);
+  const [clockOffset, setClockOffset] = useState(
+    () => new Date(serverNow).getTime() - Date.now()
+  );
 
   const applyResponse = useCallback(
     (data: { session: SerializedSession | null; serverNow: string }) => {
@@ -84,14 +98,12 @@ export function useClockStatus() {
       setError(null);
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
-      setLoading(false);
     }
   }, [applyResponse]);
 
-  useEffect(() => {
-    void refresh();
+  const isWorking = session !== null;
 
+  useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') void refresh();
     };
@@ -100,15 +112,16 @@ export function useClockStatus() {
     window.addEventListener('focus', refresh);
     window.addEventListener('online', refresh);
 
-    const interval = setInterval(refresh, 60_000);
+    // 勤務中だけ定期的に追従する（別端末での打刻を拾うため）
+    const interval = isWorking ? setInterval(refresh, 60_000) : null;
 
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', refresh);
       window.removeEventListener('online', refresh);
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
-  }, [refresh]);
+  }, [refresh, isWorking]);
 
   /**
    * 打刻を実行する。
@@ -147,7 +160,6 @@ export function useClockStatus() {
     state,
     session,
     properties,
-    loading,
     punching,
     error,
     clearError: () => setError(null),

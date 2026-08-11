@@ -1,13 +1,9 @@
-'use client';
-
-import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { MonthlySalary, Property, Reservation } from '@/app/types/domain';
-import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { todayJst } from '@/app/lib/domain/datetime';
 import { formatYen } from '@/app/lib/domain/format';
 import { isStaying } from '@/app/lib/domain/occupancy';
-import { Card, ErrorBanner, Spinner } from '@/app/components/ui/Feedback';
+import { Card } from '@/app/components/ui/Feedback';
 
 interface SalaryRow {
   user: { id: string; name: string; email: string };
@@ -23,42 +19,22 @@ const MENU = [
   { href: '/admin/settings', label: '設定', icon: '⚙', desc: '給与ルール・棟・権限' },
 ];
 
-export default function AdminDashboard() {
-  const [salaries, setSalaries] = useState<SalaryRow[]>([]);
-  const [grandTotal, setGrandTotal] = useState(0);
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [staleCount, setStaleCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+interface DashboardData {
+  salaries: SalaryRow[];
+  grandTotal: number;
+  reservations: Reservation[];
+  properties: Property[];
+  staleCount: number;
+}
 
-  // 4本のAPIをまとめ、給与集計のN+1も解消した1本のエンドポイント
-  const load = useCallback(async () => {
-    try {
-      const data = await api.get<{
-        salaries: SalaryRow[];
-        grandTotal: number;
-        reservations: Reservation[];
-        properties: Property[];
-        staleCount: number;
-      }>('/api/admin/dashboard');
-
-      setSalaries(data.salaries);
-      setGrandTotal(data.grandTotal);
-      setReservations(data.reservations);
-      setProperties(data.properties);
-      setStaleCount(data.staleCount);
-      setError(null);
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+export default function AdminDashboard({
+  initialData,
+}: {
+  initialData: DashboardData;
+}) {
+  // サーバー側で取得済み。表示のためだけの再取得はしない。
+  const { salaries, grandTotal, reservations, properties, staleCount } =
+    initialData;
 
   const today = todayJst();
   const stayingToday = reservations.filter(
@@ -67,12 +43,8 @@ export default function AdminDashboard() {
   const guestsToday = stayingToday.reduce((sum, r) => sum + r.guestCount, 0);
   const propertyMap = new Map(properties.map((p) => [p.id, p]));
 
-  if (loading) return <Spinner />;
-
   return (
     <div className="space-y-4">
-      <ErrorBanner message={error} />
-
       {staleCount > 0 && (
         <Link href="/admin/attendance" className="block">
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-semibold">

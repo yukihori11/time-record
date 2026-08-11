@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Property, Shift } from '@/app/types/domain';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
-import { formatDateJa, todayJst } from '@/app/lib/domain/datetime';
+import { formatDateJa } from '@/app/lib/domain/datetime';
 import { useAuth } from '@/app/contexts/AuthContext';
 import MonthNav from '@/app/components/MonthNav';
 import Button from '@/app/components/ui/Button';
@@ -15,12 +15,22 @@ import {
   Spinner,
 } from '@/app/components/ui/Feedback';
 
-export default function ShiftsView() {
+interface Props {
+  initialMonth: string;
+  initialShifts: Shift[];
+  initialProperties: Property[];
+}
+
+export default function ShiftsView({
+  initialMonth,
+  initialShifts,
+  initialProperties,
+}: Props) {
   const { user } = useAuth();
-  const [month, setMonth] = useState(() => todayJst().slice(0, 7));
-  const [shifts, setShifts] = useState<Shift[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [month, setMonth] = useState(initialMonth);
+  const [shifts, setShifts] = useState<Shift[]>(initialShifts);
+  const [properties, setProperties] = useState<Property[]>(initialProperties);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [decliningId, setDecliningId] = useState<string | null>(null);
@@ -49,9 +59,11 @@ export default function ShiftsView() {
     [user]
   );
 
+  // 初期表示はサーバー取得済み。月を切り替えたときだけ取りに行く
   useEffect(() => {
+    if (month === initialMonth) return;
     void load(month);
-  }, [month, load]);
+  }, [month, initialMonth, load]);
 
   const respond = async (
     shiftId: string,

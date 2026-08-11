@@ -3,16 +3,28 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { MonthlySalary, PayrollSettings } from '@/app/types/domain';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
-import { formatDateJa, todayJst } from '@/app/lib/domain/datetime';
+import { formatDateJa } from '@/app/lib/domain/datetime';
 import { formatDuration, formatMinutes, formatYen } from '@/app/lib/domain/format';
 import MonthNav from '@/app/components/MonthNav';
 import { Card, EmptyState, ErrorBanner, Spinner } from '@/app/components/ui/Feedback';
 
-export default function SalaryView() {
-  const [month, setMonth] = useState(() => todayJst().slice(0, 7));
-  const [salary, setSalary] = useState<MonthlySalary | null>(null);
-  const [settings, setSettings] = useState<PayrollSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+interface Props {
+  initialMonth: string;
+  initialSalary: MonthlySalary;
+  initialSettings: PayrollSettings;
+}
+
+export default function SalaryView({
+  initialMonth,
+  initialSalary,
+  initialSettings,
+}: Props) {
+  const [month, setMonth] = useState(initialMonth);
+  const [salary, setSalary] = useState<MonthlySalary | null>(initialSalary);
+  const [settings, setSettings] = useState<PayrollSettings | null>(
+    initialSettings
+  );
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openDate, setOpenDate] = useState<string | null>(null);
 
@@ -33,9 +45,11 @@ export default function SalaryView() {
     }
   }, []);
 
+  // 初期表示はサーバー取得済みなので、月を切り替えたときだけ取りに行く
   useEffect(() => {
+    if (month === initialMonth) return;
     void load(month);
-  }, [month, load]);
+  }, [month, initialMonth, load]);
 
   return (
     <div className="space-y-4">

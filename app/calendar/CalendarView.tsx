@@ -10,7 +10,6 @@ import type {
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { monthDays, todayJst } from '@/app/lib/domain/datetime';
 import { buildOccupancy } from '@/app/lib/domain/occupancy';
-import { useAuth } from '@/app/contexts/AuthContext';
 import MonthNav from '@/app/components/MonthNav';
 import { ErrorBanner, Spinner } from '@/app/components/ui/Feedback';
 import Button from '@/app/components/ui/Button';
@@ -18,17 +17,39 @@ import CalendarGrid from './CalendarGrid';
 import DayDetail from './DayDetail';
 import ReservationForm from './ReservationForm';
 
-export default function CalendarView() {
-  const { user, isAdmin } = useAuth();
-  const [month, setMonth] = useState(() => todayJst().slice(0, 7));
+interface CalendarData {
+  reservations: Reservation[];
+  properties: Property[];
+  shifts: Shift[];
+  users: UserProfile[];
+}
+
+interface Props {
+  initialMonth: string;
+  initialData: CalendarData;
+  currentUserId: string;
+  isAdmin: boolean;
+}
+
+export default function CalendarView({
+  initialMonth,
+  initialData,
+  currentUserId,
+  isAdmin,
+}: Props) {
+  const [month, setMonth] = useState(initialMonth);
   const [selectedDate, setSelectedDate] = useState<string | null>(() =>
     todayJst()
   );
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [shifts, setShifts] = useState<Shift[]>([]);
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [reservations, setReservations] = useState<Reservation[]>(
+    initialData.reservations
+  );
+  const [properties, setProperties] = useState<Property[]>(
+    initialData.properties
+  );
+  const [shifts, setShifts] = useState<Shift[]>(initialData.shifts);
+  const [users, setUsers] = useState<UserProfile[]>(initialData.users);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Reservation | null>(null);
@@ -56,9 +77,11 @@ export default function CalendarView() {
     }
   }, []);
 
+  // 初期表示はサーバー取得済み。月を切り替えたときだけ取りに行く
   useEffect(() => {
+    if (month === initialMonth) return;
     void load(month);
-  }, [month, load]);
+  }, [month, initialMonth, load]);
 
   const days = useMemo(
     () => buildOccupancy(monthDays(month), reservations, properties, shifts),
@@ -120,13 +143,13 @@ export default function CalendarView() {
             </Button>
           )}
 
-          {selectedDay && user && (
+          {selectedDay && (
             <DayDetail
               day={selectedDay}
               reservations={reservations}
               properties={properties}
               users={users}
-              currentUserId={user.id}
+              currentUserId={currentUserId}
               isAdmin={isAdmin}
               onChanged={() => load(month)}
               onEditReservation={(r) => {

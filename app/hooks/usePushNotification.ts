@@ -72,12 +72,43 @@ export function usePushNotification() {
     setIsIos(ios);
     setIsIosNonSafari(iosOther);
 
-    // 既に購読済みか確認する
+    // 購読の状態を確認する。
+    //
+    // 端末側だけを見ると、DBの登録が消えた場合に
+    // 「受け取る」と表示されたまま通知が届かなくなる。
+    // ユーザーを作り直すと購読も CASCADE で消えるため、
+    // 実際にこの状態が起きた。
+    //
+    // 食い違っていたら黙って登録し直す。
     if (supported) {
-      void navigator.serviceWorker.ready
-        .then((reg) => reg.pushManager.getSubscription())
-        .then((sub) => setSubscribed(Boolean(sub)))
-        .catch(() => setSubscribed(false));
+      void (async () => {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+
+          if (!sub) {
+            setSubscribed(false);
+            return;
+          }
+
+          const res = await api.get<{ registered: boolean }>(
+            `/api/push/status?endpoint=${encodeURIComponent(sub.endpoint)}`
+          );
+
+          if (res.registered) {
+            setSubscribed(true);
+            return;
+          }
+
+          // 端末は購読しているのにサーバーに無い。登録し直す。
+          await api.post('/api/push/subscribe', {
+            subscription: sub.toJSON(),
+          });
+          setSubscribed(true);
+        } catch {
+          setSubscribed(false);
+        }
+      })();
     }
   }, []);
 

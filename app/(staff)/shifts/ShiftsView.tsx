@@ -6,6 +6,7 @@ import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { formatDateJa } from '@/app/lib/domain/datetime';
 import { useAuth } from '@/app/contexts/AuthContext';
 import MonthNav from '@/app/components/MonthNav';
+import NotificationSetup from '@/app/components/NotificationSetup';
 import Button from '@/app/components/ui/Button';
 import { Field, Textarea } from '@/app/components/ui/Field';
 import {
@@ -92,6 +93,9 @@ export default function ShiftsView({
 
   return (
     <div className="space-y-4">
+      {/* シフトを見に来た人に通知を勧める */}
+      <NotificationSetup />
+
       <MonthNav month={month} onChange={setMonth} />
 
       <ErrorBanner message={error} />

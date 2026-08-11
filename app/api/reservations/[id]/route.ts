@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAdmin, requireUser } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
 import { toReservation, toShift } from '@/app/lib/api/mappers';
+import { notifyShiftAssignment } from '@/app/lib/server/shift-notify';
 import {
   dateStr,
   int,
@@ -83,11 +84,25 @@ export async function PATCH(request: Request, { params }: Params) {
       );
     }
 
+    const propertyId = uuid(body.propertyId, '棟');
+    const shifts = parseShifts(body.shifts);
+
+    // 変更前の割当を控えておき、新しく追加された分だけ通知する。
+    // 時刻を直しただけの人に再通知すると鬱陶しいため。
+    const { data: before } = await supabase
+      .from('shifts')
+      .select('user_id, shift_date')
+      .eq('reservation_id', reservationId);
+
+    const existing = new Set(
+      (before ?? []).map((s) => `${s.user_id}:${s.shift_date}`)
+    );
+
     const { data, error } = await supabase.rpc(
       'update_reservation_with_shifts',
       {
         p_reservation_id: reservationId,
-        p_property_id: uuid(body.propertyId, '棟'),
+        p_property_id: propertyId,
         p_type_id: uuid(body.typeId, '種別'),
         p_check_in: checkIn,
         p_check_out: checkOut,
@@ -96,11 +111,25 @@ export async function PATCH(request: Request, { params }: Params) {
             ? 0
             : int(body.guestCount, '人数', { min: 0, max: 100 }),
         p_note: optionalStr(body.note, 'メモ', 2000),
-        p_shifts: parseShifts(body.shifts),
+        p_shifts: shifts,
       }
     );
 
     if (error) throw error;
+
+    const added = shifts.filter(
+      (s) => s.userId && !existing.has(`${s.userId}:${s.date}`)
+    );
+
+    if (added.length > 0) {
+      const { data: property } = await supabase
+        .from('properties')
+        .select('name')
+        .eq('id', propertyId)
+        .maybeSingle();
+
+      await notifyShiftAssignment(supabase, added, property?.name);
+    }
 
     return NextResponse.json({ reservation: toReservation(data) });
   } catch (error) {

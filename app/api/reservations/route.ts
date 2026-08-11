@@ -13,6 +13,7 @@ import {
   uuid,
 } from '@/app/lib/api/validate';
 import { monthRange } from '@/app/lib/domain/datetime';
+import { notifyShiftAssignment } from '@/app/lib/server/shift-notify';
 
 /**
  * 予約一覧。
@@ -100,10 +101,13 @@ export async function POST(request: Request) {
       );
     }
 
+    const propertyId = uuid(body.propertyId, '棟');
+    const shifts = parseShifts(body.shifts);
+
     const { data, error } = await supabase.rpc(
       'create_reservation_with_shifts',
       {
-        p_property_id: uuid(body.propertyId, '棟'),
+        p_property_id: propertyId,
         p_type_id: uuid(body.typeId, '種別'),
         p_check_in: checkIn,
         p_check_out: checkOut,
@@ -112,11 +116,21 @@ export async function POST(request: Request) {
             ? 0
             : int(body.guestCount, '人数', { min: 0, max: 100 }),
         p_note: optionalStr(body.note, 'メモ', 2000),
-        p_shifts: parseShifts(body.shifts),
+        p_shifts: shifts,
       }
     );
 
     if (error) throw error;
+
+    // 割り当てたスタッフに知らせる。
+    // 通知が失敗しても予約の作成は取り消さない。
+    const { data: property } = await supabase
+      .from('properties')
+      .select('name')
+      .eq('id', propertyId)
+      .maybeSingle();
+
+    await notifyShiftAssignment(supabase, shifts, property?.name);
 
     return NextResponse.json(
       { reservation: toReservation(data) },

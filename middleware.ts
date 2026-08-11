@@ -97,7 +97,11 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // 静的ファイルと画像を除く全てのパス
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // 静的ファイルと画像を除く全てのパス。
+    //
+    // sw.js を除外しないと Service Worker の取得が
+    // ログイン画面へリダイレクトされ、登録できずに
+    // プッシュ通知が一切動かなくなる。
+    '/((?!_next/static|_next/image|favicon.ico|manifest\\.webmanifest|sw\\.js|icon\\.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

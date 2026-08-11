@@ -6,7 +6,6 @@ import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { formatDateJa } from '@/app/lib/domain/datetime';
 import { useAuth } from '@/app/contexts/AuthContext';
 import MonthNav from '@/app/components/MonthNav';
-import NotificationStatus from '@/app/components/NotificationStatus';
 import NotificationList from '@/app/components/NotificationList';
 import Button from '@/app/components/ui/Button';
 import { Field, Textarea } from '@/app/components/ui/Field';
@@ -96,9 +95,6 @@ export default function ShiftsView({
     <div className="space-y-4">
       {/* 通知を消してしまっても、ここで確認できる */}
       <NotificationList />
-
-      {/* 通知の設定。状態の確認と切り替えをここに集約している */}
-      <NotificationStatus />
 
       <MonthNav month={month} onChange={setMonth} />
 

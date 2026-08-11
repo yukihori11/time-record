@@ -8,7 +8,8 @@ const STAFF_ITEMS = [
   { href: '/clock', label: '打刻', icon: '⏱' },
   { href: '/salary', label: '給与', icon: '¥' },
   { href: '/shifts', label: 'シフト', icon: '📋' },
-  { href: '/calendar', label: '予約', icon: '📅' },
+  { href: '/calendar', label: '予定', icon: '📅' },
+  { href: '/account', label: '設定', icon: '⚙' },
 ];
 
 const ADMIN_ITEMS = [

@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
+import { useAuth } from '@/app/contexts/AuthContext';
 import Button from '@/app/components/ui/Button';
 import { Field, Input } from '@/app/components/ui/Field';
 import { ErrorBanner } from '@/app/components/ui/Feedback';
@@ -11,6 +12,7 @@ import { ErrorBanner } from '@/app/components/ui/Feedback';
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { reload } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -23,8 +25,15 @@ function LoginForm() {
 
     try {
       await api.post('/api/auth/login', { email, password });
+
+      // AuthProvider は起動時に1回しか /api/me を呼ばない。
+      // ログイン画面を開いた時点では未認証なので user は null のままで、
+      // 画面遷移しても再マウントされないため読み込み中から進まなくなる。
+      // ここで取り直してから移動する。
+      await reload();
+
       const redirect = searchParams.get('redirect');
-      router.push(redirect && redirect.startsWith('/') ? redirect : '/');
+      router.replace(redirect && redirect.startsWith('/') ? redirect : '/');
       router.refresh();
     } catch (err) {
       setError(errorMessage(err));

@@ -6,8 +6,8 @@ import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { formatDateJa } from '@/app/lib/domain/datetime';
 import { useAuth } from '@/app/contexts/AuthContext';
 import MonthNav from '@/app/components/MonthNav';
-import NotificationSetup from '@/app/components/NotificationSetup';
 import NotificationStatus from '@/app/components/NotificationStatus';
+import NotificationList from '@/app/components/NotificationList';
 import Button from '@/app/components/ui/Button';
 import { Field, Textarea } from '@/app/components/ui/Field';
 import {
@@ -94,10 +94,10 @@ export default function ShiftsView({
 
   return (
     <div className="space-y-4">
-      {/* まだ許可していない人に勧める。許可済みなら出ない */}
-      <NotificationSetup />
+      {/* 通知を消してしまっても、ここで確認できる */}
+      <NotificationList />
 
-      {/* 今の状態はここで確認・切り替えできる */}
+      {/* 通知の設定。状態の確認と切り替えをここに集約している */}
       <NotificationStatus />
 
       <MonthNav month={month} onChange={setMonth} />

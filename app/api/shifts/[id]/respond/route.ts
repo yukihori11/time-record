@@ -5,6 +5,7 @@ import { withLogging } from '@/app/lib/api/handler';
 import { toShift } from '@/app/lib/api/mappers';
 import { enumValue, optionalStr, readBody, uuid } from '@/app/lib/api/validate';
 import { log } from '@/app/lib/api/logger';
+import { notifyAdminsOfShiftResponse } from '@/app/lib/server/admin-notify';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -42,7 +43,28 @@ export const POST = withLogging('shifts.id.respond.post', async (request: Reques
 
     if (error) throw error;
 
-    return NextResponse.json({ shift: toShift(data) });
+    const shift = toShift(data);
+
+    // 管理者に知らせる。特に辞退は代わりを探す必要があるため、
+    // 早く気づけることが重要。通知の失敗で回答は取り消さない。
+    const { data: property } = shift.propertyId
+      ? await supabase
+          .from('properties')
+          .select('name')
+          .eq('id', shift.propertyId)
+          .maybeSingle()
+      : { data: null };
+
+    await notifyAdminsOfShiftResponse(supabase, {
+      staffName: profile.name || profile.email,
+      response,
+      shiftDate: shift.shiftDate,
+      propertyName: property?.name ?? null,
+      startTime: shift.startTime,
+      reason: shift.declineReason ?? null,
+    });
+
+    return NextResponse.json({ shift });
   } catch (error) {
     return errorResponse(error);
   }

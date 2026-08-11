@@ -9,6 +9,7 @@ import type {
 import { todayJst } from '@/app/lib/domain/datetime';
 import { formatYen } from '@/app/lib/domain/format';
 import { Card } from '@/app/components/ui/Feedback';
+import NotificationList from '@/app/components/NotificationList';
 
 interface SalaryRow {
   user: { id: string; name: string; email: string };
@@ -67,6 +68,9 @@ export default function AdminDashboard({
 
   return (
     <div className="space-y-4">
+      {/* スタッフの回答など。通知を消しても後から確認できる */}
+      <NotificationList />
+
       {staleCount > 0 && (
         <Link href="/admin/attendance" className="block">
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-semibold">

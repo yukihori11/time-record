@@ -1,15 +1,16 @@
 'use client';
 
 import { usePushNotification } from '@/app/hooks/usePushNotification';
+import { useInstallPrompt } from '@/app/hooks/useInstallPrompt';
 import Button from '@/app/components/ui/Button';
 import { Card } from '@/app/components/ui/Feedback';
 
 /**
- * 通知の状態を確認・切り替える。
+ * 通知の設定。
  *
- * バナーは一度許可すると出なくなるため、
- * 「今どうなっているか」を確かめる場所が必要になる。
- * 端末ごとに状態が違うので、開いている端末の状態を示す。
+ * 状態の表示と、有効化・解除をここにまとめている。
+ * 以前はバナーと状態カードが別々にあり、
+ * 未設定のときに「通知を有効にする」が2つ出ていた。
  */
 export default function NotificationStatus() {
   const {
@@ -21,6 +22,8 @@ export default function NotificationStatus() {
     subscribe,
     unsubscribe,
   } = usePushNotification();
+
+  const { canInstall, installed, install } = useInstallPrompt();
 
   const state = (() => {
     if (permission === 'unsupported') {
@@ -51,7 +54,7 @@ export default function NotificationStatus() {
         label: '追加が必要',
         color: 'bg-amber-100 text-amber-700',
         message:
-          '共有ボタンから「ホーム画面に追加」すると通知を受け取れます',
+          '画面下の共有ボタン（□に↑）から「ホーム画面に追加」し、追加したアイコンから開き直してください',
       };
     }
     if (subscribed) {
@@ -64,7 +67,7 @@ export default function NotificationStatus() {
     return {
       label: '受け取らない',
       color: 'bg-slate-200 text-slate-600',
-      message: '通知を有効にすると、シフトの割当をすぐ知ることができます',
+      message: '有効にすると、シフトの割当をすぐ知ることができます',
     };
   })();
 
@@ -87,10 +90,12 @@ export default function NotificationStatus() {
 
       <p className="text-xs text-slate-500 leading-relaxed">{state.message}</p>
 
-      <p className="text-xs text-slate-400 mt-1.5">
-        設定は端末ごとです。他の端末でも受け取るには、
-        その端末でも有効にしてください。
-      </p>
+      {subscribed && (
+        <p className="text-xs text-slate-400 mt-1.5">
+          設定は端末ごとです。他の端末でも受け取るには、
+          その端末でも有効にしてください。
+        </p>
+      )}
 
       {canToggle && (
         <Button
@@ -102,6 +107,19 @@ export default function NotificationStatus() {
           onClick={subscribed ? unsubscribe : subscribe}
         >
           {subscribed ? 'この端末で受け取らない' : '通知を有効にする'}
+        </Button>
+      )}
+
+      {/* Chrome などアプリとして入れられる環境では勧める */}
+      {canInstall && !installed && (
+        <Button
+          size="md"
+          fullWidth
+          variant="secondary"
+          className="mt-2"
+          onClick={install}
+        >
+          ホーム画面に追加
         </Button>
       )}
     </Card>

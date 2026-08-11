@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { redact } from '@/app/lib/domain/redact';
+import { toErrorFields } from '@/app/lib/domain/error-fields';
 
 /**
  * API のログ。
@@ -43,23 +44,8 @@ export const log = {
 };
 
 /** エラーをログに出せる形に変換する */
-export function errorFields(error: unknown): LogFields {
-  if (error instanceof Error) {
-    return {
-      errName: error.name,
-      errMsg: error.message,
-      // スタックは長いので先頭のみ
-      stack: error.stack?.split('\n').slice(0, 4).join(' | '),
-      // Supabase のエラーは code / details を持つ
-      ...(('code' in error) ? { pgCode: (error as { code: unknown }).code } : {}),
-      ...(('details' in error)
-        ? { details: (error as { details: unknown }).details }
-        : {}),
-      ...(('hint' in error) ? { hint: (error as { hint: unknown }).hint } : {}),
-    };
-  }
-  return { err: String(error) };
-}
+// エラーの変換は domain/error-fields.ts に集約している（テスト済み）
+export const errorFields = toErrorFields;
 
 /** リクエストごとの識別子。1リクエストの流れを追うために使う */
 export function requestId(): string {

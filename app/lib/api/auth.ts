@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { cache } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { UserProfile } from '@/app/types/domain';
 import { createServerSupabase } from '@/app/lib/supabase/server';
@@ -11,13 +12,13 @@ export interface AuthContext {
 }
 
 /**
- * ログイン必須のハンドラで使う。
+ * 認証の実処理。
  *
- * 返す supabase クライアントは Cookie のセッションを持つため
- * RLS が効いた状態でクエリが走る。API 層にバグがあっても
- * DB が最後の砦になる。
+ * cache() で包むことで、同一リクエスト内では1回しか実行されない。
+ * これが無いと、1つの画面で認証だけのために
+ * Supabase の認証サーバーへ何度も往復することになる。
  */
-export async function requireUser(): Promise<AuthContext> {
+const resolveAuth = cache(async (): Promise<AuthContext> => {
   const supabase = await createServerSupabase();
 
   const {
@@ -53,6 +54,17 @@ export async function requireUser(): Promise<AuthContext> {
       isActive: row.is_active,
     },
   };
+});
+
+/**
+ * ログイン必須のハンドラで使う。
+ *
+ * 返す supabase クライアントは Cookie のセッションを持つため
+ * RLS が効いた状態でクエリが走る。API 層にバグがあっても
+ * DB が最後の砦になる。
+ */
+export async function requireUser(): Promise<AuthContext> {
+  return resolveAuth();
 }
 
 /**
@@ -62,7 +74,7 @@ export async function requireUser(): Promise<AuthContext> {
  * JWT に焼き込むと降格が次回トークン更新まで反映されないため。
  */
 export async function requireAdmin(): Promise<AuthContext> {
-  const ctx = await requireUser();
+  const ctx = await resolveAuth();
 
   if (ctx.profile.role !== 'admin') {
     throw new ApiError('FORBIDDEN', '管理者権限が必要です');

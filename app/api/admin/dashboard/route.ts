@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
-import { monthStr } from '@/app/lib/api/validate';
 import {
   SESSION_SELECT,
   toHourlyWage,
+  toProperty,
+  toReservation,
   toSettings,
   toWorkSession,
 } from '@/app/lib/api/mappers';
@@ -12,26 +13,28 @@ import { calcMonthlySalary, DEFAULT_SETTINGS } from '@/app/lib/domain/payroll';
 import { monthRange, todayJst } from '@/app/lib/domain/datetime';
 
 /**
- * 全スタッフの月次給与。
+ * 管理ダッシュボードのデータを1回で返す。
  *
- * 以前はスタッフごとに3クエリ発行していた（10人で30クエリ）。
- * 全員分をまとめて取得し、集計はメモリ上で行う。
- * DBへの問い合わせは人数によらず4回。
+ * 以前はスタッフ1人ごとに給与計算のクエリを3本ずつ投げていたため、
+ * 10人いれば30クエリになっていた。
+ * 全員分の勤怠と時給をまとめて取り、集計はメモリ上で行う。
  */
-export async function GET(request: Request) {
+export async function GET() {
   try {
     const { supabase } = await requireAdmin();
-    const url = new URL(request.url);
 
-    const month = monthStr(
-      url.searchParams.get('month') ?? todayJst().slice(0, 7)
-    );
-    const format = url.searchParams.get('format');
+    const today = todayJst();
+    const month = today.slice(0, 7);
     const { from, to } = monthRange(month);
 
-    // 無効化したスタッフも含める。
-    // 月の途中で退職した人の未払い分が消えてしまうため。
-    const [usersRes, sessionsRes, wagesRes, settingsRes] = await Promise.all([
+    const [
+      usersRes,
+      sessionsRes,
+      wagesRes,
+      settingsRes,
+      reservationsRes,
+      propertiesRes,
+    ] = await Promise.all([
       supabase.from('users').select('id, name, email').order('name'),
       supabase
         .from('work_sessions')
@@ -40,9 +43,19 @@ export async function GET(request: Request) {
         .lte('work_date', to),
       supabase.from('hourly_wages').select('*').order('effective_from'),
       supabase.from('app_settings').select('*').eq('id', 1).single(),
+      supabase
+        .from('reservations')
+        .select('*')
+        .eq('status', 'confirmed')
+        .lte('check_in', to)
+        .gt('check_out', from),
+      supabase
+        .from('properties')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order'),
     ]);
 
-    if (usersRes.error) throw usersRes.error;
     if (sessionsRes.error) throw sessionsRes.error;
 
     const settings = settingsRes.data
@@ -52,7 +65,8 @@ export async function GET(request: Request) {
     const allWages = (wagesRes.data ?? []).map(toHourlyWage);
     const now = new Date();
 
-    const results = (usersRes.data ?? [])
+    // ユーザーごとに配分してから集計する（DBへの追加問い合わせなし）
+    const salaries = (usersRes.data ?? [])
       .map((u) => {
         const sessions = allSessions.filter((s) => s.userId === u.id);
         if (sessions.length === 0) return null;
@@ -70,35 +84,18 @@ export async function GET(request: Request) {
       })
       .filter((r): r is NonNullable<typeof r> => r !== null);
 
-    if (format === 'csv') {
-      const rows = [
-        ['氏名', 'メール', '勤務日数', '実労働時間', '支給額'],
-        ...results.map((r) => [
-          r.user.name,
-          r.user.email,
-          String(r.salary.days.length),
-          (r.salary.totalWorkMs / 3600_000).toFixed(2),
-          String(r.salary.totalAmount),
-        ]),
-      ];
-
-      const csv = rows
-        .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
-        .join('\n');
-
-      // Excel が UTF-8 と認識できるよう BOM を付ける
-      return new NextResponse(`﻿${csv}`, {
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="salary-${month}.csv"`,
-        },
-      });
-    }
+    // 12時間以上経っても退勤されていない勤務
+    const twelveHoursAgo = Date.now() - 12 * 3600_000;
+    const staleSessions = allSessions.filter(
+      (s) => s.clockOut === null && s.clockIn.getTime() < twelveHoursAgo
+    );
 
     return NextResponse.json({
-      month,
-      results,
-      grandTotal: results.reduce((sum, r) => sum + r.salary.totalAmount, 0),
+      salaries,
+      grandTotal: salaries.reduce((sum, r) => sum + r.salary.totalAmount, 0),
+      reservations: (reservationsRes.data ?? []).map(toReservation),
+      properties: (propertiesRes.data ?? []).map(toProperty),
+      staleCount: staleSessions.length,
     });
   } catch (error) {
     return errorResponse(error);

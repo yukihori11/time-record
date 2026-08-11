@@ -23,6 +23,16 @@ function isPublic(pathname: string): boolean {
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
+  const { pathname } = request.nextUrl;
+
+  // API ルートは各ハンドラが requireUser / requireAdmin で認証する。
+  // ここでも getUser() を呼ぶと Supabase の認証サーバーへの往復が
+  // リクエストごとに二重に発生し、体感速度をはっきり損なう。
+  // セッションの更新はページ遷移時に行われるので、それで足りる。
+  if (pathname.startsWith('/api/')) {
+    response.headers.set('X-Content-Type-Options', 'nosniff');
+    return response;
+  }
 
   const supabase = createServerClient(
     process.env.SUPABASE_URL!,
@@ -55,16 +65,7 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-
   if (!user && !isPublic(pathname)) {
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json(
-        { error: { code: 'UNAUTHORIZED', message: 'ログインが必要です' } },
-        { status: 401 }
-      );
-    }
-
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);

@@ -33,21 +33,21 @@ export default function CalendarView() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Reservation | null>(null);
 
+  // 4本のAPIを叩くとその回数だけ認証が走るため、1本にまとめている
   const load = useCallback(async (targetMonth: string) => {
     setLoading(true);
     try {
-      const [res, props, shiftRes, userRes] = await Promise.all([
-        api.get<{ reservations: Reservation[] }>(
-          `/api/reservations?month=${targetMonth}`
-        ),
-        api.get<{ properties: Property[] }>('/api/properties'),
-        api.get<{ shifts: Shift[] }>(`/api/shifts?month=${targetMonth}`),
-        api.get<{ users: UserProfile[] }>('/api/users'),
-      ]);
-      setReservations(res.reservations);
-      setProperties(props.properties);
-      setShifts(shiftRes.shifts);
-      setUsers(userRes.users);
+      const data = await api.get<{
+        reservations: Reservation[];
+        properties: Property[];
+        shifts: Shift[];
+        users: UserProfile[];
+      }>(`/api/calendar?month=${targetMonth}`);
+
+      setReservations(data.reservations);
+      setProperties(data.properties);
+      setShifts(data.shifts);
+      setUsers(data.users);
       setError(null);
     } catch (err) {
       setError(errorMessage(err));

@@ -32,27 +32,22 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 4本のAPIをまとめ、給与集計のN+1も解消した1本のエンドポイント
   const load = useCallback(async () => {
-    const today = todayJst();
-    const month = today.slice(0, 7);
-
     try {
-      const [salaryRes, resRes, propRes, sessionRes] = await Promise.all([
-        api.get<{ results: SalaryRow[]; grandTotal: number }>(
-          `/api/admin/salary?month=${month}`
-        ),
-        api.get<{ reservations: Reservation[] }>(`/api/reservations?month=${month}`),
-        api.get<{ properties: Property[] }>('/api/properties'),
-        api.get<{ staleSessions: string[] }>(
-          `/api/admin/sessions?from=${month}-01&to=${today}`
-        ),
-      ]);
+      const data = await api.get<{
+        salaries: SalaryRow[];
+        grandTotal: number;
+        reservations: Reservation[];
+        properties: Property[];
+        staleCount: number;
+      }>('/api/admin/dashboard');
 
-      setSalaries(salaryRes.results);
-      setGrandTotal(salaryRes.grandTotal);
-      setReservations(resRes.reservations);
-      setProperties(propRes.properties);
-      setStaleCount(sessionRes.staleSessions.length);
+      setSalaries(data.salaries);
+      setGrandTotal(data.grandTotal);
+      setReservations(data.reservations);
+      setProperties(data.properties);
+      setStaleCount(data.staleCount);
       setError(null);
     } catch (err) {
       setError(errorMessage(err));

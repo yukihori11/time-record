@@ -34,10 +34,21 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const supabase = createServerClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!,
-    {
+  // 環境変数が無いと createServerClient が例外を投げ、
+  // middleware ごとクラッシュして全ページが 500 になる。
+  // 設定漏れに気づけるよう、ログを残して素通しする。
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error(
+      '[middleware] SUPABASE_URL / SUPABASE_ANON_KEY が未設定です。' +
+        'Vercel の Environment Variables を確認してください。'
+    );
+    return response;
+  }
+
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll();

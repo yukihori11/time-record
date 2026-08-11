@@ -54,6 +54,15 @@ cp .env.example .env.local
 
 `NEXT_PUBLIC_` を付けた変数はブラウザに露出します。Supabase の接続情報には**絶対に付けない**でください。
 
+### Vercel などにデプロイする場合
+
+同じ4つを Environment Variables に設定します。**`NEXT_PUBLIC_SUPABASE_URL` /
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` という名前は使いません。**
+接頭辞の付いた名前で設定していると、アプリが変数を見つけられず
+`MIDDLEWARE_INVOCATION_FAILED` で全ページが 500 になります。
+
+環境変数を変更したあとは**再デプロイが必要**です。
+
 ### 4. パスワードリセットの設定
 
 Supabase ダッシュボード → **Authentication → URL Configuration** で、

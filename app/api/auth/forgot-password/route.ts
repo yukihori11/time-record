@@ -19,7 +19,8 @@ export async function POST(request: Request) {
 
     const supabase = await createServerSupabase();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${siteUrl}/reset-password`,
+      // サーバーでトークンを検証してからパスワード設定画面へ送る
+      redirectTo: `${siteUrl}/auth/confirm?next=/reset-password`,
     });
 
     if (error) {

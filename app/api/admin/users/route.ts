@@ -44,7 +44,8 @@ export async function POST(request: Request) {
 
     const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
       data: { name },
-      redirectTo: `${siteUrl}/reset-password`,
+      // サーバーでトークンを検証してからパスワード設定画面へ送る
+      redirectTo: `${siteUrl}/auth/confirm?next=/reset-password`,
     });
 
     if (error) {

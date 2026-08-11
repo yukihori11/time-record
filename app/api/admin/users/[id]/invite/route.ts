@@ -41,7 +41,8 @@ export async function POST(_request: Request, { params }: Params) {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
     const { error } = await admin.auth.admin.inviteUserByEmail(target.email, {
-      redirectTo: `${siteUrl}/reset-password`,
+      // サーバーでトークンを検証してからパスワード設定画面へ送る
+      redirectTo: `${siteUrl}/auth/confirm?next=/reset-password`,
     });
 
     if (error) {

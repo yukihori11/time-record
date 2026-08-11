@@ -5,8 +5,8 @@ import type {
   HourlyWage,
   PayrollSettings,
   Property,
-  Reservation,
   ReservationType,
+  Schedule,
   Shift,
   WorkSession,
 } from '@/app/types/domain';
@@ -85,15 +85,13 @@ export function toProperty(row: any): Property {
   };
 }
 
-export function toReservation(row: any): Reservation {
+export function toSchedule(row: any): Schedule {
   return {
     id: row.id,
     propertyId: row.property_id,
     typeId: row.type_id,
     guestCount: row.guest_count ?? 0,
-    checkIn: row.check_in,
-    checkOut: row.check_out,
-    nights: row.nights ?? 0,
+    scheduleDate: row.schedule_date,
     status: row.status,
     note: row.note ?? null,
   };

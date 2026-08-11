@@ -5,24 +5,24 @@ import type {
   DayActual,
   MonthlyActualTotal,
   Property,
-  Reservation,
   ReservationType,
+  Schedule,
   Shift,
   UserProfile,
 } from '@/app/types/domain';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { todayJst } from '@/app/lib/domain/datetime';
 import { formatDuration, formatYen } from '@/app/lib/domain/format';
-import { buildDayDetail, buildWeeks } from '@/app/lib/domain/occupancy';
+import { buildDayDetail, schedulesByDate } from '@/app/lib/domain/occupancy';
 import MonthNav from '@/app/components/MonthNav';
 import { ErrorBanner, Spinner } from '@/app/components/ui/Feedback';
 import Button from '@/app/components/ui/Button';
 import CalendarGrid from './CalendarGrid';
 import DayDetail from './DayDetail';
-import ReservationForm from './ReservationForm';
+import ScheduleForm from './ScheduleForm';
 
 interface CalendarData {
-  reservations: Reservation[];
+  schedules: Schedule[];
   properties: Property[];
   shifts: Shift[];
   types: ReservationType[];
@@ -53,7 +53,7 @@ export default function CalendarView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<Reservation | null>(null);
+  const [editing, setEditing] = useState<Schedule | null>(null);
 
   const load = useCallback(async (targetMonth: string) => {
     setLoading(true);
@@ -76,10 +76,10 @@ export default function CalendarView({
     void load(month);
   }, [month, initialMonth, load]);
 
-  // 連泊を日付またぎの帯にするため、週単位に組み直す
-  const weeks = useMemo(
-    () => buildWeeks(month, data.reservations, data.properties, data.types),
-    [month, data.reservations, data.properties, data.types]
+  // 予定は1日で完結するので、日付ごとにまとめるだけでよい
+  const scheduleMap = useMemo(
+    () => schedulesByDate(data.schedules, data.properties, data.types),
+    [data.schedules, data.properties, data.types]
   );
 
   const detail = useMemo(
@@ -87,7 +87,7 @@ export default function CalendarView({
       selectedDate
         ? buildDayDetail(
             selectedDate,
-            data.reservations,
+            data.schedules,
             data.properties,
             data.types,
             data.shifts
@@ -171,7 +171,8 @@ export default function CalendarView({
       ) : (
         <>
           <CalendarGrid
-            weeks={weeks}
+            month={month}
+            scheduleMap={scheduleMap}
             shifts={data.shifts}
             users={data.users}
             actuals={data.actuals}
@@ -201,8 +202,8 @@ export default function CalendarView({
               isAdmin={isAdmin}
               actuals={data.actuals[detail.date] ?? []}
               onChanged={() => load(month)}
-              onEditReservation={(r) => {
-                setEditing(r);
+              onEditSchedule={(sc) => {
+                setEditing(sc);
                 setFormOpen(true);
               }}
             />
@@ -211,11 +212,11 @@ export default function CalendarView({
       )}
 
       {formOpen && isAdmin && (
-        <ReservationForm
+        <ScheduleForm
           properties={data.properties}
           types={data.types}
           users={data.users}
-          reservation={editing}
+          schedule={editing}
           defaultDate={selectedDate ?? todayJst()}
           onClose={() => {
             setFormOpen(false);

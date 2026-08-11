@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin, requireUser } from '@/app/lib/api/auth';
-import { ApiError, errorResponse } from '@/app/lib/api/errors';
-import { toReservation } from '@/app/lib/api/mappers';
+import { errorResponse } from '@/app/lib/api/errors';
+import { toSchedule } from '@/app/lib/api/mappers';
 import {
   dateStr,
   int,
@@ -16,11 +16,10 @@ import { monthRange } from '@/app/lib/domain/datetime';
 import { notifyShiftAssignment } from '@/app/lib/server/shift-notify';
 
 /**
- * 予約一覧。
+ * 予定の一覧。
  *
- * 月を指定すると、その月に期間が重なる予約を返す。
- * 前月末チェックイン・当月チェックアウトの予約も拾う必要があるため、
- * 単純な期間一致ではなく重なり判定で引く。
+ * 予定は1日で完結するため、期間の重なりを考える必要がない。
+ * 指定した範囲の日付を素直に引くだけで済む。
  */
 export async function GET(request: Request) {
   try {
@@ -44,34 +43,29 @@ export async function GET(request: Request) {
       .from('reservations')
       .select('*')
       .eq('status', 'confirmed')
-      .lte('check_in', to)
-      .gte('check_out', from)
-      .order('check_in');
+      .gte('schedule_date', from)
+      .lte('schedule_date', to)
+      .order('schedule_date');
 
     if (error) throw error;
 
     return NextResponse.json({
-      reservations: (data ?? []).map(toReservation),
+      schedules: (data ?? []).map(toSchedule),
     });
   } catch (error) {
     return errorResponse(error);
   }
 }
 
-/** 予約フォームから送られる1日分のシフト指定を検証する */
-function parseShifts(raw: unknown): {
-  date: string;
-  userId: string | null;
-  startTime: string | null;
-  endTime: string | null;
-  note: string | null;
-}[] {
+/** 予定フォームから送られる担当者の指定を検証する */
+function parseShifts(raw: unknown, scheduleDate: string) {
   if (!Array.isArray(raw)) return [];
 
   return raw.map((item) => {
     const o = (item ?? {}) as Record<string, unknown>;
     return {
-      date: dateStr(o.date, '日付'),
+      // 予定は1日で完結するので、日付は予定日で固定する
+      date: scheduleDate,
       userId: optionalUuid(o.userId, '担当者'),
       startTime: optionalTime(o.startTime, '入り時間'),
       endTime: optionalTime(o.endTime, '終了時間'),
@@ -81,9 +75,9 @@ function parseShifts(raw: unknown): {
 }
 
 /**
- * 予約の登録。シフトの割当も同時に行う。
+ * 予定の登録。担当スタッフの割当も同時に行う。
  *
- * 予約だけ作られてシフトが失敗する状態を避けるため、
+ * 予定だけ作られてシフトが失敗する状態を避けるため、
  * DB側の関数で単一トランザクションとして処理する。
  */
 export async function POST(request: Request) {
@@ -91,39 +85,26 @@ export async function POST(request: Request) {
     const { supabase } = await requireAdmin();
     const body = await readBody(request);
 
-    const checkIn = dateStr(body.checkIn, '開始日');
-    const checkOut = dateStr(body.checkOut, '終了日');
-
-    if (checkOut < checkIn) {
-      throw new ApiError(
-        'VALIDATION_ERROR',
-        '終了日は開始日以降にしてください'
-      );
-    }
-
     const propertyId = uuid(body.propertyId, '棟');
-    const shifts = parseShifts(body.shifts);
+    const scheduleDate = dateStr(body.scheduleDate, '日付');
+    const shifts = parseShifts(body.shifts, scheduleDate);
 
-    const { data, error } = await supabase.rpc(
-      'create_reservation_with_shifts',
-      {
-        p_property_id: propertyId,
-        p_type_id: uuid(body.typeId, '種別'),
-        p_check_in: checkIn,
-        p_check_out: checkOut,
-        p_guest_count:
-          body.guestCount === undefined || body.guestCount === null
-            ? 0
-            : int(body.guestCount, '人数', { min: 0, max: 100 }),
-        p_note: optionalStr(body.note, 'メモ', 2000),
-        p_shifts: shifts,
-      }
-    );
+    const { data, error } = await supabase.rpc('create_schedule_with_shifts', {
+      p_property_id: propertyId,
+      p_type_id: uuid(body.typeId, '種別'),
+      p_schedule_date: scheduleDate,
+      p_guest_count:
+        body.guestCount === undefined || body.guestCount === null
+          ? 0
+          : int(body.guestCount, '人数', { min: 0, max: 100 }),
+      p_note: optionalStr(body.note, 'メモ', 2000),
+      p_shifts: shifts,
+    });
 
     if (error) throw error;
 
     // 割り当てたスタッフに知らせる。
-    // 通知が失敗しても予約の作成は取り消さない。
+    // 通知が失敗しても予定の作成は取り消さない。
     const { data: property } = await supabase
       .from('properties')
       .select('name')
@@ -132,10 +113,7 @@ export async function POST(request: Request) {
 
     await notifyShiftAssignment(supabase, shifts, property?.name);
 
-    return NextResponse.json(
-      { reservation: toReservation(data) },
-      { status: 201 }
-    );
+    return NextResponse.json({ schedule: toSchedule(data) }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }

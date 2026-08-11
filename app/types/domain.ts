@@ -89,17 +89,17 @@ export interface ReservationType {
 }
 
 /**
- * 予約 = 「どの棟で・いつ・何人・どんな用件か」。
- * 客の個人情報は保持しない。
+ * 予定 = 「その日・どの棟で・何人・何をするか」。
+ *
+ * 1日で完結する。連泊の期間管理はしない。
+ * 客の個人情報も保持しない。
  */
-export interface Reservation {
+export interface Schedule {
   id: string;
   propertyId: string;
   typeId: string;
   guestCount: number;
-  checkIn: string; // YYYY-MM-DD
-  checkOut: string; // YYYY-MM-DD（作業のみの日は checkIn と同じ）
-  nights: number;
+  scheduleDate: string; // YYYY-MM-DD
   status: 'confirmed' | 'cancelled';
   note?: string | null;
 }

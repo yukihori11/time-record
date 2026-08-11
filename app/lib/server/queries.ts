@@ -5,8 +5,8 @@ import type {
   DayActual,
   MonthlySalary,
   Property,
-  Reservation,
   ReservationType,
+  Schedule,
   Shift,
   UserProfile,
   WorkSession,
@@ -16,7 +16,7 @@ import {
   SESSION_SELECT,
   toHourlyWage,
   toProperty,
-  toReservation,
+  toSchedule,
   toReservationType,
   toSettings,
   toShift,
@@ -137,9 +137,9 @@ export const getCalendarData = cache(async (month: string) => {
         .from('reservations')
         .select('*')
         .eq('status', 'confirmed')
-        .lte('check_in', to)
-        .gte('check_out', from)
-        .order('check_in'),
+        .gte('schedule_date', from)
+        .lte('schedule_date', to)
+        .order('schedule_date'),
       supabase
         .from('properties')
         .select('*')
@@ -234,7 +234,7 @@ export const getCalendarData = cache(async (month: string) => {
     );
 
   return {
-    reservations: (reservationsRes.data ?? []).map(toReservation) as Reservation[],
+    schedules: (reservationsRes.data ?? []).map(toSchedule) as Schedule[],
     properties: (propertiesRes.data ?? []).map(toProperty) as Property[],
     shifts: (shiftsRes.data ?? []).map(toShift) as Shift[],
     types: (typesRes.data ?? []).map(toReservationType) as ReservationType[],

@@ -2,13 +2,12 @@ import Link from 'next/link';
 import type {
   MonthlySalary,
   Property,
-  Reservation,
   ReservationType,
+  Schedule,
   Shift,
 } from '@/app/types/domain';
 import { todayJst } from '@/app/lib/domain/datetime';
 import { formatYen } from '@/app/lib/domain/format';
-import { isActiveOn } from '@/app/lib/domain/occupancy';
 import { Card } from '@/app/components/ui/Feedback';
 
 interface SalaryRow {
@@ -27,7 +26,7 @@ const MENU = [
 interface DashboardData {
   salaries: SalaryRow[];
   grandTotal: number;
-  reservations: Reservation[];
+  schedules: Schedule[];
   properties: Property[];
   types: ReservationType[];
   shifts: Shift[];
@@ -43,7 +42,7 @@ export default function AdminDashboard({
   const {
     salaries,
     grandTotal,
-    reservations,
+    schedules,
     properties,
     types,
     shifts,
@@ -51,8 +50,9 @@ export default function AdminDashboard({
   } = initialData;
 
   const today = todayJst();
-  const activeToday = reservations.filter(
-    (r) => r.status === 'confirmed' && isActiveOn(r, today)
+  // 予定は1日単位なので、その日の分を拾うだけ
+  const activeToday = schedules.filter(
+    (s) => s.status === 'confirmed' && s.scheduleDate === today
   );
   const propertyMap = new Map(properties.map((p) => [p.id, p]));
   const typeMap = new Map(types.map((t) => [t.id, t]));

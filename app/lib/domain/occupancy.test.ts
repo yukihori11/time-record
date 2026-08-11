@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type {
   Property,
-  Reservation,
   ReservationType,
+  Schedule,
   Shift,
 } from '@/app/types/domain';
 import {
   buildDayDetail,
-  buildWeeks,
-  isActiveOn,
-  isCheckOutDay,
+  calendarCells,
+  schedulesByDate,
   shiftsByDate,
   shiftSummary,
 } from './occupancy';
@@ -40,183 +39,105 @@ const TYPES: ReservationType[] = [
   },
 ];
 
-function stay(overrides: Partial<Reservation> = {}): Reservation {
+function schedule(overrides: Partial<Schedule> = {}): Schedule {
   return {
-    id: 'R1',
+    id: 'S1',
     propertyId: 'P1',
     typeId: 'T-STAY',
     guestCount: 3,
-    checkIn: '2026-08-15',
-    checkOut: '2026-08-18',
-    nights: 3,
+    scheduleDate: '2026-08-15',
     status: 'confirmed',
     ...overrides,
   };
 }
 
-/** 清掃など、その日限りの作業 */
-function work(date: string, overrides: Partial<Reservation> = {}): Reservation {
-  return stay({
-    id: `W-${date}`,
-    typeId: 'T-CLEAN',
-    guestCount: 0,
-    checkIn: date,
-    checkOut: date,
-    nights: 0,
-    ...overrides,
-  });
-}
-
 // ============================================================
-describe('isActiveOn', () => {
-  const r = stay(); // 8/15 IN, 8/18 OUT
-
-  it('チェックイン日から最終泊まで滞在中', () => {
-    expect(isActiveOn(r, '2026-08-15')).toBe(true);
-    expect(isActiveOn(r, '2026-08-16')).toBe(true);
-    expect(isActiveOn(r, '2026-08-17')).toBe(true);
+describe('calendarCells', () => {
+  it('月初の曜日ぶんだけ空セルを置く', () => {
+    // 2026-08-01 は土曜日（週の7列目）
+    const cells = calendarCells('2026-08');
+    expect(cells.slice(0, 6).every((c) => c === null)).toBe(true);
+    expect(cells[6]).toBe('2026-08-01');
   });
 
-  it('チェックアウト日は滞在中ではない（朝に出るため）', () => {
-    expect(isActiveOn(r, '2026-08-18')).toBe(false);
+  it('7の倍数になるよう末尾を埋める', () => {
+    for (const month of ['2026-01', '2026-02', '2026-08', '2026-11']) {
+      expect(calendarCells(month).length % 7).toBe(0);
+    }
   });
 
-  it('期間外は false', () => {
-    expect(isActiveOn(r, '2026-08-14')).toBe(false);
-    expect(isActiveOn(r, '2026-08-19')).toBe(false);
+  it('その月の日数ぶんの日付を含む', () => {
+    const cells = calendarCells('2026-02').filter(Boolean);
+    expect(cells).toHaveLength(28);
+    expect(cells[0]).toBe('2026-02-01');
+    expect(cells[27]).toBe('2026-02-28');
   });
 
-  it('1日で完結する作業は当日のみ', () => {
-    const w = work('2026-08-20');
-    expect(isActiveOn(w, '2026-08-20')).toBe(true);
-    expect(isActiveOn(w, '2026-08-19')).toBe(false);
-    expect(isActiveOn(w, '2026-08-21')).toBe(false);
-  });
-});
-
-describe('isCheckOutDay', () => {
-  it('宿泊のチェックアウト日を判定する', () => {
-    expect(isCheckOutDay(stay(), '2026-08-18')).toBe(true);
-    expect(isCheckOutDay(stay(), '2026-08-17')).toBe(false);
-  });
-
-  it('1日で完結する作業はチェックアウト扱いにしない', () => {
-    expect(isCheckOutDay(work('2026-08-20'), '2026-08-20')).toBe(false);
+  it('うるう年の2月は29日', () => {
+    expect(calendarCells('2028-02').filter(Boolean)).toHaveLength(29);
   });
 });
 
 // ============================================================
-describe('buildWeeks', () => {
-  it('月を週単位に分割する', () => {
-    // 2026-08-01 は土曜日
-    const weeks = buildWeeks('2026-08', [], PROPERTIES, TYPES);
-    expect(weeks.length).toBeGreaterThanOrEqual(5);
-    expect(weeks[0].days).toHaveLength(7);
-    // 1日が土曜なので最初の6セルは空
-    expect(weeks[0].days.slice(0, 6).every((d) => d === null)).toBe(true);
-    expect(weeks[0].days[6]).toBe('2026-08-01');
-  });
-
-  it('連泊を1本の帯にする', () => {
-    // 8/16(日)〜8/19(水) の3泊。同じ週に収まる
-    const weeks = buildWeeks(
-      '2026-08',
-      [stay({ checkIn: '2026-08-16', checkOut: '2026-08-19' })],
-      PROPERTIES,
-      TYPES
-    );
-
-    const bars = weeks.flatMap((w) => w.bars);
-    expect(bars).toHaveLength(1);
-    // 8/16(日)から8/18(火)までの3日分
-    expect(bars[0].startCol).toBe(0);
-    expect(bars[0].span).toBe(3);
-    expect(bars[0].isStart).toBe(true);
-    expect(bars[0].isEnd).toBe(true);
-  });
-
-  it('週をまたぐ連泊は2本に分割し、切れ目を示す', () => {
-    // 8/14(金)〜8/18(火)。8/15(土)で週が変わる
-    const weeks = buildWeeks(
-      '2026-08',
-      [stay({ checkIn: '2026-08-14', checkOut: '2026-08-18' })],
-      PROPERTIES,
-      TYPES
-    );
-
-    const bars = weeks.flatMap((w) => w.bars);
-    expect(bars).toHaveLength(2);
-
-    // 前半は開始側なので左端が丸く、右は続く
-    expect(bars[0].isStart).toBe(true);
-    expect(bars[0].isEnd).toBe(false);
-
-    // 後半は続きなので左は角ばり、右端が終わり
-    expect(bars[1].isStart).toBe(false);
-    expect(bars[1].isEnd).toBe(true);
-  });
-
-  it('重なる予約を別々の段に配置する', () => {
-    const weeks = buildWeeks(
-      '2026-08',
+describe('schedulesByDate', () => {
+  it('日付ごとにまとめる', () => {
+    const map = schedulesByDate(
       [
-        stay({ id: 'R1', propertyId: 'P1', checkIn: '2026-08-16', checkOut: '2026-08-19' }),
-        stay({ id: 'R2', propertyId: 'P2', checkIn: '2026-08-17', checkOut: '2026-08-20' }),
+        schedule({ id: 'S1', scheduleDate: '2026-08-15' }),
+        schedule({ id: 'S2', scheduleDate: '2026-08-15', propertyId: 'P2' }),
+        schedule({ id: 'S3', scheduleDate: '2026-08-16' }),
       ],
       PROPERTIES,
       TYPES
     );
 
-    const bars = weeks.flatMap((w) => w.bars);
-    const lanes = new Set(bars.map((b) => b.lane));
-    expect(lanes.size).toBe(2);
+    expect(map.get('2026-08-15')).toHaveLength(2);
+    expect(map.get('2026-08-16')).toHaveLength(1);
   });
 
-  it('重ならない予約は同じ段を再利用する', () => {
-    const weeks = buildWeeks(
-      '2026-08',
+  it('棟と種別を紐づける', () => {
+    const map = schedulesByDate([schedule()], PROPERTIES, TYPES);
+    const entry = map.get('2026-08-15')![0];
+
+    expect(entry.property?.name).toBe('A棟');
+    expect(entry.type?.name).toBe('宿泊');
+  });
+
+  it('棟の表示順に並べる', () => {
+    const map = schedulesByDate(
       [
-        stay({ id: 'R1', checkIn: '2026-08-16', checkOut: '2026-08-17' }),
-        stay({ id: 'R2', propertyId: 'P2', checkIn: '2026-08-19', checkOut: '2026-08-20' }),
+        schedule({ id: 'S2', propertyId: 'P2' }),
+        schedule({ id: 'S1', propertyId: 'P1' }),
       ],
       PROPERTIES,
       TYPES
     );
 
-    const bars = weeks.flatMap((w) => w.bars);
-    expect(bars.every((b) => b.lane === 0)).toBe(true);
+    expect(map.get('2026-08-15')!.map((e) => e.property?.name)).toEqual([
+      'A棟',
+      'B棟',
+    ]);
   });
 
-  it('キャンセルされた予約は帯にしない', () => {
-    const weeks = buildWeeks(
-      '2026-08',
-      [stay({ status: 'cancelled' })],
+  it('キャンセルされた予定は含めない', () => {
+    const map = schedulesByDate(
+      [schedule({ status: 'cancelled' })],
       PROPERTIES,
       TYPES
     );
-    expect(weeks.flatMap((w) => w.bars)).toHaveLength(0);
+    expect(map.size).toBe(0);
   });
 
-  it('1日だけの作業も帯になる', () => {
-    const weeks = buildWeeks('2026-08', [work('2026-08-20')], PROPERTIES, TYPES);
-    const bars = weeks.flatMap((w) => w.bars);
-    expect(bars).toHaveLength(1);
-    expect(bars[0].span).toBe(1);
-    expect(bars[0].type?.name).toBe('清掃');
-  });
-
-  it('前月から続く予約も当月分だけ帯にする', () => {
-    const weeks = buildWeeks(
-      '2026-08',
-      [stay({ checkIn: '2026-07-30', checkOut: '2026-08-03' })],
+  it('同じ日に宿泊と清掃が共存できる', () => {
+    const map = schedulesByDate(
+      [
+        schedule({ id: 'S1', typeId: 'T-STAY' }),
+        schedule({ id: 'S2', typeId: 'T-CLEAN', propertyId: 'P2' }),
+      ],
       PROPERTIES,
       TYPES
     );
-
-    const bars = weeks.flatMap((w) => w.bars);
-    expect(bars.length).toBeGreaterThan(0);
-    // 月初から始まるので「続き」扱い
-    expect(bars[0].isStart).toBe(false);
+    expect(map.get('2026-08-15')).toHaveLength(2);
   });
 });
 
@@ -224,10 +145,10 @@ describe('buildWeeks', () => {
 describe('buildDayDetail', () => {
   const shifts: Shift[] = [
     {
-      id: 'S1',
+      id: 'SH1',
       userId: 'U1',
       propertyId: 'P1',
-      reservationId: 'R1',
+      reservationId: 'S1',
       shiftDate: '2026-08-15',
       startTime: '10:00',
       endTime: null,
@@ -235,10 +156,10 @@ describe('buildDayDetail', () => {
       respondedAt: null,
     },
     {
-      id: 'S2',
+      id: 'SH2',
       userId: 'U2',
       propertyId: 'P1',
-      reservationId: 'R1',
+      reservationId: null,
       shiftDate: '2026-08-16',
       startTime: '09:00',
       endTime: null,
@@ -250,70 +171,52 @@ describe('buildDayDetail', () => {
   it('その日の予定とシフトを集める', () => {
     const detail = buildDayDetail(
       '2026-08-15',
-      [stay()],
+      [schedule()],
       PROPERTIES,
       TYPES,
       shifts
     );
 
-    expect(detail.reservations).toHaveLength(1);
-    expect(detail.reservations[0].nightNumber).toBe(1);
-    expect(detail.reservations[0].totalNights).toBe(3);
-    expect(detail.reservations[0].isStart).toBe(true);
+    expect(detail.schedules).toHaveLength(1);
     expect(detail.shifts).toHaveLength(1);
     expect(detail.shifts[0].startTime).toBe('10:00');
   });
 
-  it('最終泊を判定する', () => {
-    const detail = buildDayDetail(
-      '2026-08-17',
-      [stay()],
-      PROPERTIES,
-      TYPES,
-      []
-    );
-    expect(detail.reservations[0].isLastNight).toBe(true);
-    expect(detail.reservations[0].nightNumber).toBe(3);
-  });
-
-  it('客が滞在しない種別は人数に数えない', () => {
+  it('別の日の予定は含めない', () => {
     const detail = buildDayDetail(
       '2026-08-20',
-      [work('2026-08-20', { guestCount: 0 })],
+      [schedule()],
       PROPERTIES,
       TYPES,
-      []
+      shifts
     );
-    expect(detail.reservations).toHaveLength(1);
-    expect(detail.totalGuests).toBe(0);
+    expect(detail.schedules).toHaveLength(0);
+    expect(detail.shifts).toHaveLength(0);
   });
 
-  it('宿泊と作業が同じ日に共存できる', () => {
+  it('客が滞在する種別だけを人数に数える', () => {
     const detail = buildDayDetail(
       '2026-08-15',
-      [stay(), work('2026-08-15', { propertyId: 'P2' })],
+      [
+        schedule({ id: 'S1', typeId: 'T-STAY', guestCount: 4 }),
+        schedule({
+          id: 'S2',
+          typeId: 'T-CLEAN',
+          guestCount: 0,
+          propertyId: 'P2',
+        }),
+      ],
       PROPERTIES,
       TYPES,
       []
     );
-    expect(detail.reservations).toHaveLength(2);
-    // 宿泊の3名のみカウント
-    expect(detail.totalGuests).toBe(3);
-  });
 
-  it('チェックアウトを別枠で返す', () => {
-    const detail = buildDayDetail(
-      '2026-08-18',
-      [stay()],
-      PROPERTIES,
-      TYPES,
-      []
-    );
-    expect(detail.reservations).toHaveLength(0);
-    expect(detail.checkOuts).toHaveLength(1);
+    expect(detail.schedules).toHaveLength(2);
+    expect(detail.totalGuests).toBe(4);
   });
 });
 
+// ============================================================
 describe('shiftsByDate', () => {
   const users = [
     { id: 'U1', name: '田中 太郎', email: 't@example.com' },
@@ -343,63 +246,46 @@ describe('shiftsByDate', () => {
       status: 'assigned',
       respondedAt: null,
     },
-    {
-      id: 'S3',
-      userId: 'U1',
-      propertyId: 'P1',
-      reservationId: null,
-      shiftDate: '2026-08-18',
-      startTime: '10:00',
-      endTime: null,
-      status: 'declined',
-      respondedAt: null,
-    },
   ];
 
   it('日付ごとにまとめる', () => {
-    const map = shiftsByDate(list, users);
-    expect(map.get('2026-08-15')).toHaveLength(2);
-    expect(map.get('2026-08-18')).toHaveLength(1);
+    expect(shiftsByDate(list, users).get('2026-08-15')).toHaveLength(2);
   });
 
   it('狭い幅に収まるよう姓だけにする', () => {
-    const map = shiftsByDate(list, users);
-    const names = map.get('2026-08-15')!.map((s) => s.name);
+    const names = shiftsByDate(list, users)
+      .get('2026-08-15')!
+      .map((s) => s.name);
     expect(names).toContain('田中');
     expect(names).not.toContain('田中 太郎');
   });
 
   it('入り時間の早い順に並べる', () => {
-    const map = shiftsByDate(list, users);
-    const times = map.get('2026-08-15')!.map((s) => s.startTime);
+    const times = shiftsByDate(list, users)
+      .get('2026-08-15')!
+      .map((s) => s.startTime);
     expect(times).toEqual(['09:00', '13:00']);
   });
 
-  it('承諾状況を保持する', () => {
-    const map = shiftsByDate(list, users);
-    expect(map.get('2026-08-18')![0].status).toBe('declined');
+  it('実績と突き合わせられるよう userId を持つ', () => {
+    const first = shiftsByDate(list, users).get('2026-08-15')![0];
+    expect(first.userId).toBe('U2');
   });
 
   it('該当ユーザーがいなくても落ちない', () => {
-    const map = shiftsByDate(list, []);
-    expect(map.get('2026-08-15')![0].name).toBe('スタッフ');
+    expect(shiftsByDate(list, []).get('2026-08-15')![0].name).toBe('スタッフ');
   });
 });
 
 describe('shiftSummary', () => {
   it('回答状況を集計する', () => {
-    const summary = shiftSummary([
-      { status: 'accepted' },
-      { status: 'assigned' },
-      { status: 'assigned' },
-      { status: 'declined' },
-    ] as Shift[]);
-
-    expect(summary).toEqual({
-      total: 4,
-      accepted: 1,
-      pending: 2,
-      declined: 1,
-    });
+    expect(
+      shiftSummary([
+        { status: 'accepted' },
+        { status: 'assigned' },
+        { status: 'assigned' },
+        { status: 'declined' },
+      ] as Shift[])
+    ).toEqual({ total: 4, accepted: 1, pending: 2, declined: 1 });
   });
 });

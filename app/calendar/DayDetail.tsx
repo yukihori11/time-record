@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type {
   DayActual,
   Property,
-  Reservation,
+  Schedule,
   Shift,
   UserProfile,
 } from '@/app/types/domain';
@@ -24,7 +24,7 @@ export default function DayDetail({
   isAdmin,
   actuals,
   onChanged,
-  onEditReservation,
+  onEditSchedule,
 }: {
   detail: DayDetailData;
   properties: Property[];
@@ -34,9 +34,8 @@ export default function DayDetail({
   /** その日の実績（打刻の結果） */
   actuals: DayActual[];
   onChanged: () => void;
-  onEditReservation?: (reservation: Reservation) => void;
+  onEditSchedule?: (schedule: Schedule) => void;
 }) {
-  const propertyMap = new Map(properties.map((p) => [p.id, p]));
   const userMap = new Map(users.map((u) => [u.id, u]));
 
   return (
@@ -52,20 +51,20 @@ export default function DayDetail({
         )}
       </div>
 
-      {/* その日の予定（宿泊・清掃・準備など） */}
+      {/* その日の予定 */}
       <section>
         <h3 className="text-xs font-bold text-slate-500 mb-2">予定</h3>
-        {detail.reservations.length === 0 ? (
+        {detail.schedules.length === 0 ? (
           <p className="text-sm text-slate-400">予定はありません</p>
         ) : (
           <ul className="space-y-2">
-            {detail.reservations.map((item) => {
-              const r = item.reservation;
+            {detail.schedules.map((item) => {
+              const sc = item.schedule;
               const hasGuests = item.type?.hasGuests !== false;
 
               return (
                 <li
-                  key={r.id}
+                  key={sc.id}
                   className="rounded-xl border border-slate-200 overflow-hidden"
                 >
                   <div
@@ -78,50 +77,23 @@ export default function DayDetail({
                         {item.property?.name ?? '棟不明'}
                       </span>
                     </span>
-                    {hasGuests && r.guestCount > 0 && (
-                      <span>{r.guestCount}名</span>
+                    {hasGuests && sc.guestCount > 0 && (
+                      <span>{sc.guestCount}名</span>
                     )}
                   </div>
 
                   <div className="px-3 py-2.5 space-y-1 text-sm bg-white">
-                    {/* 宿泊なら何泊目か、作業なら当日のみと分かるように */}
-                    {hasGuests && item.totalNights > 1 ? (
-                      <p className="text-slate-500 text-xs">
-                        {r.checkIn} 〜 {r.checkOut}（{item.totalNights}泊）
-                        <span className="ml-2 font-semibold text-slate-700">
-                          {item.nightNumber}泊目
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="text-slate-500 text-xs">
-                        {r.checkIn}
-                        {r.checkOut !== r.checkIn && ` 〜 ${r.checkOut}`}
+                    {sc.note && (
+                      <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-2 py-1.5 whitespace-pre-wrap">
+                        {sc.note}
                       </p>
                     )}
 
-                    {item.isStart && hasGuests && item.totalNights > 1 && (
-                      <p className="text-xs text-emerald-600 font-semibold">
-                        本日チェックイン
-                      </p>
-                    )}
-                    {item.isLastNight && hasGuests && item.totalNights > 1 && (
-                      <p className="text-xs text-blue-600 font-semibold">
-                        最終泊（翌日チェックアウト）
-                      </p>
-                    )}
-
-                    {r.note && (
-                      <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-2 py-1.5 mt-1.5 whitespace-pre-wrap">
-                        {r.note}
-                      </p>
-                    )}
-
-                    {isAdmin && onEditReservation && (
+                    {isAdmin && onEditSchedule && (
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => onEditReservation(r)}
-                        className="mt-1"
+                        onClick={() => onEditSchedule(sc)}
                       >
                         編集
                       </Button>
@@ -133,28 +105,6 @@ export default function DayDetail({
           </ul>
         )}
       </section>
-
-      {/* チェックアウト */}
-      {detail.checkOuts.length > 0 && (
-        <section>
-          <h3 className="text-xs font-bold text-slate-500 mb-2">
-            チェックアウト
-          </h3>
-          <ul className="space-y-1.5">
-            {detail.checkOuts.map((r) => (
-              <li
-                key={r.id}
-                className="text-sm px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 flex justify-between"
-              >
-                <span className="font-semibold text-slate-700">
-                  {propertyMap.get(r.propertyId)?.name ?? '棟不明'}
-                </span>
-                <span className="text-slate-500">{r.guestCount}名 退室</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
       {/* この日に入るスタッフ */}
       <ShiftSection

@@ -6,7 +6,7 @@ import {
   SESSION_SELECT,
   toHourlyWage,
   toProperty,
-  toReservation,
+  toSchedule,
   toReservationType,
   toSettings,
   toShift,
@@ -59,8 +59,8 @@ async function loadDashboard() {
       .from('reservations')
       .select('*')
       .eq('status', 'confirmed')
-      .lte('check_in', to)
-      .gte('check_out', from),
+      .gte('schedule_date', from)
+      .lte('schedule_date', to),
     supabase
       .from('properties')
       .select('*')
@@ -108,7 +108,7 @@ async function loadDashboard() {
   return {
     salaries,
     grandTotal: salaries.reduce((sum, r) => sum + r.salary.totalAmount, 0),
-    reservations: (reservationsRes.data ?? []).map(toReservation),
+    schedules: (reservationsRes.data ?? []).map(toSchedule),
     properties: (propertiesRes.data ?? []).map(toProperty),
     types: (typesRes.data ?? []).map(toReservationType),
     shifts: (shiftsRes.data ?? []).map(toShift),

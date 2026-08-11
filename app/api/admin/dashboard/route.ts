@@ -5,7 +5,7 @@ import {
   SESSION_SELECT,
   toHourlyWage,
   toProperty,
-  toReservation,
+  toSchedule,
   toSettings,
   toWorkSession,
 } from '@/app/lib/api/mappers';
@@ -47,8 +47,8 @@ export async function GET() {
         .from('reservations')
         .select('*')
         .eq('status', 'confirmed')
-        .lte('check_in', to)
-        .gt('check_out', from),
+        .gte('schedule_date', from)
+        .lte('schedule_date', to),
       supabase
         .from('properties')
         .select('*')
@@ -93,7 +93,7 @@ export async function GET() {
     return NextResponse.json({
       salaries,
       grandTotal: salaries.reduce((sum, r) => sum + r.salary.totalAmount, 0),
-      reservations: (reservationsRes.data ?? []).map(toReservation),
+      schedules: (reservationsRes.data ?? []).map(toSchedule),
       properties: (propertiesRes.data ?? []).map(toProperty),
       staleCount: staleSessions.length,
     });

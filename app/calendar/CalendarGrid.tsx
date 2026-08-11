@@ -1,17 +1,12 @@
 'use client';
 
-import type { DayActual, UserProfile } from '@/app/types/domain';
-import type { WeekRow } from '@/app/lib/domain/occupancy';
-import { shiftsByDate } from '@/app/lib/domain/occupancy';
+import type { DayActual, Shift, UserProfile } from '@/app/types/domain';
+import type { ScheduleEntry } from '@/app/lib/domain/occupancy';
+import { calendarCells, shiftsByDate } from '@/app/lib/domain/occupancy';
 import { todayJst } from '@/app/lib/domain/datetime';
 import { formatDuration } from '@/app/lib/domain/format';
-import type { Shift } from '@/app/types/domain';
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
-
-// 帯は2行（棟＋人数 / 種別）なので高さを確保する
-const BAR_HEIGHT = 30;
-const BAR_GAP = 2;
 
 const STATUS_DOT: Record<Shift['status'], string> = {
   accepted: 'bg-emerald-500',
@@ -28,22 +23,21 @@ const STATUS_TEXT: Record<Shift['status'], string> = {
 /**
  * 月カレンダー。
  *
- * 連泊は日付をまたぐ1本の帯で表示する。
- * 週の境界で切れるが、切れた側の角を丸めないことで
- * 「続いている」ことが分かるようにしている。
- *
- * 担当スタッフは連泊中でも日ごとに変わるため、
- * 帯ではなく日付のマスの中に出す。
+ * 予定は1日で完結するため、日付のマスの中に積むだけでよい。
+ * 期間をまたぐ帯の配置は不要。
  */
 export default function CalendarGrid({
-  weeks,
+  month,
+  scheduleMap,
   shifts,
   users,
   actuals,
   onSelect,
   selectedDate,
 }: {
-  weeks: WeekRow[];
+  month: string;
+  /** 日付ごとの予定 */
+  scheduleMap: Map<string, ScheduleEntry[]>;
   shifts: Shift[];
   users: UserProfile[];
   /** 日付ごとの実績。打刻した時間を出す */
@@ -53,10 +47,11 @@ export default function CalendarGrid({
 }) {
   const today = todayJst();
   const shiftMap = shiftsByDate(shifts, users);
+  const cells = calendarCells(month);
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-2 overflow-x-auto">
-      <div className="min-w-[340px]">
+      <div className="min-w-[320px]">
         <div className="grid grid-cols-7 mb-1">
           {WEEKDAYS.map((w, i) => (
             <div
@@ -74,81 +69,81 @@ export default function CalendarGrid({
           ))}
         </div>
 
-        {weeks.map((week, wi) => {
-          const laneCount = week.bars.reduce(
-            (max, b) => Math.max(max, b.lane + 1),
-            0
-          );
-          const barsHeight = laneCount * (BAR_HEIGHT + BAR_GAP);
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((date, i) => {
+            if (!date) {
+              return <div key={`pad-${i}`} className="min-h-[84px]" />;
+            }
 
-          // その週で最も多いシフト件数に合わせて高さを揃える
-          const maxShifts = week.days.reduce(
-            (max, d) => Math.max(max, d ? (shiftMap.get(d)?.length ?? 0) : 0),
-            0
-          );
-          const shiftsHeight = Math.min(maxShifts, 3) * 14;
+            const isToday = date === today;
+            const isSelected = date === selectedDate;
+            const daySchedules = scheduleMap.get(date) ?? [];
+            const dayShifts = shiftMap.get(date) ?? [];
+            const dayActuals = actuals[date] ?? [];
 
-          return (
-            <div key={wi} className="relative mb-1">
-              <div className="grid grid-cols-7 gap-1">
-                {week.days.map((date, di) => {
-                  if (!date) {
-                    return <div key={di} className="min-h-[64px]" />;
+            return (
+              <button
+                key={date}
+                onClick={() => onSelect(date)}
+                className={`
+                  min-h-[84px] p-1 rounded-lg border text-left align-top
+                  transition-colors overflow-hidden
+                  ${
+                    isSelected
+                      ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                      : isToday
+                        ? 'border-blue-300 bg-blue-50/40'
+                        : 'border-slate-100 hover:bg-slate-50'
                   }
-
-                  const isToday = date === today;
-                  const isSelected = date === selectedDate;
-
-                  return (
-                    <button
-                      key={date}
-                      onClick={() => onSelect(date)}
-                      style={{ paddingBottom: barsHeight + shiftsHeight + 4 }}
-                      className={`
-                        min-h-[64px] p-1 rounded-lg border text-left transition-colors
-                        ${
-                          isSelected
-                            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                            : isToday
-                              ? 'border-blue-300 bg-blue-50/40'
-                              : 'border-slate-100 hover:bg-slate-50'
-                        }
-                      `}
-                    >
-                      <div
-                        className={`text-xs font-bold ${
-                          isToday ? 'text-blue-600' : 'text-slate-700'
-                        }`}
-                      >
-                        {Number(date.slice(-2))}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* その日に入るスタッフ。帯の下に置く */}
-              <div
-                className="absolute inset-x-0 grid grid-cols-7 gap-1 pointer-events-none"
-                style={{ bottom: 4, height: shiftsHeight }}
+                `}
               >
-                {week.days.map((date, di) => {
-                  const dayShifts = date ? (shiftMap.get(date) ?? []) : [];
-                  const dayActuals = date ? (actuals[date] ?? []) : [];
+                <div
+                  className={`text-xs font-bold mb-0.5 ${
+                    isToday ? 'text-blue-600' : 'text-slate-700'
+                  }`}
+                >
+                  {Number(date.slice(-2))}
+                </div>
 
-                  return (
-                    <div key={di} className="px-0.5 overflow-hidden">
-                      {dayShifts.slice(0, 3).map((s) => {
-                        // 打刻済みなら実績時間を出す。
-                        // 予定（入り時間）より実績の方が知りたい情報のため。
-                        const actual = dayActuals.find(
-                          (a) => a.userId === s.userId
-                        );
+                {/* その日の予定 */}
+                <div className="space-y-0.5">
+                  {daySchedules.slice(0, 2).map((e) => {
+                    const hasGuests = e.type?.hasGuests !== false;
+                    return (
+                      <div
+                        key={e.schedule.id}
+                        className="text-[9px] leading-[13px] px-1 py-0.5 rounded text-white font-bold truncate"
+                        style={{ backgroundColor: e.type?.color ?? '#94a3b8' }}
+                        title={`${e.property?.name ?? ''} ${e.type?.name ?? ''}`}
+                      >
+                        {e.type?.icon} {e.property?.name}
+                        {hasGuests && e.schedule.guestCount > 0 && (
+                          <span className="ml-0.5">
+                            {e.schedule.guestCount}名
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {daySchedules.length > 2 && (
+                    <div className="text-[9px] text-slate-400 leading-[13px] pl-0.5">
+                      +{daySchedules.length - 2}件
+                    </div>
+                  )}
+                </div>
 
-                        return (
+                {/* その日に入るスタッフ。打刻済みなら実績時間を出す */}
+                {dayShifts.length > 0 && (
+                  <div className="mt-0.5 space-y-0.5">
+                    {dayShifts.slice(0, 2).map((s) => {
+                      const actual = dayActuals.find(
+                        (a) => a.userId === s.userId
+                      );
+
+                      return (
                         <div
                           key={s.id}
-                          className="flex items-center gap-0.5 leading-[14px]"
+                          className="flex items-center gap-0.5 leading-[13px]"
                           title={`${s.name} ${s.startTime ?? ''}`}
                         >
                           <span
@@ -179,81 +174,19 @@ export default function CalendarGrid({
                             )}
                           </span>
                         </div>
-                        );
-                      })}
-                      {dayShifts.length > 3 && (
-                        <div className="text-[9px] text-slate-400 leading-[14px] pl-1.5">
-                          +{dayShifts.length - 3}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* 予定の帯。スタッフ表示の上に重ねる */}
-              <div
-                className="absolute inset-x-0 pointer-events-none"
-                style={{ bottom: shiftsHeight + 4 }}
-              >
-                {week.bars.map((bar) => {
-                  const color = bar.type?.color ?? '#94a3b8';
-                  const hasGuests = bar.type?.hasGuests !== false;
-
-                  return (
-                    <div
-                      key={`${bar.reservation.id}-${bar.startCol}`}
-                      className="absolute px-0.5"
-                      style={{
-                        left: `${(bar.startCol / 7) * 100}%`,
-                        width: `${(bar.span / 7) * 100}%`,
-                        bottom: bar.lane * (BAR_HEIGHT + BAR_GAP),
-                        height: BAR_HEIGHT,
-                      }}
-                    >
-                      <div
-                        className="h-full flex flex-col justify-center px-1.5 text-white overflow-hidden"
-                        style={{
-                          backgroundColor: color,
-                          // 週をまたいで続く側は角を丸めない
-                          borderTopLeftRadius: bar.isStart ? 6 : 0,
-                          borderBottomLeftRadius: bar.isStart ? 6 : 0,
-                          borderTopRightRadius: bar.isEnd ? 6 : 0,
-                          borderBottomRightRadius: bar.isEnd ? 6 : 0,
-                        }}
-                        title={`${bar.property?.name ?? ''} ${bar.type?.name ?? ''}${
-                          hasGuests && bar.reservation.guestCount > 0
-                            ? ` ${bar.reservation.guestCount}名`
-                            : ''
-                        }`}
-                      >
-                        {bar.isStart ? (
-                          <>
-                            <span className="text-[10px] font-bold leading-[13px] truncate">
-                              {bar.type?.icon} {bar.property?.name}
-                              {hasGuests && bar.reservation.guestCount > 0 && (
-                                <span className="ml-1">
-                                  {bar.reservation.guestCount}名
-                                </span>
-                              )}
-                            </span>
-                            <span className="text-[9px] leading-[12px] truncate opacity-90">
-                              {bar.type?.name}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-[10px] font-bold leading-[13px] truncate opacity-90">
-                            {bar.property?.name} つづき
-                          </span>
-                        )}
+                      );
+                    })}
+                    {dayShifts.length > 2 && (
+                      <div className="text-[9px] text-slate-400 leading-[13px] pl-1.5">
+                        +{dayShifts.length - 2}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+                    )}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/app/lib/client/fetcher';
+import { detectBrowser } from '@/app/lib/domain/browser';
 
 type PermissionState = 'unsupported' | 'default' | 'granted' | 'denied';
 
@@ -36,6 +37,7 @@ export function usePushNotification() {
   const [busy, setBusy] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [isIos, setIsIos] = useState(false);
+  const [isIosNonSafari, setIsIosNonSafari] = useState(false);
 
   useEffect(() => {
     const supported =
@@ -56,7 +58,12 @@ export function usePushNotification() {
         (window.navigator as { standalone?: boolean }).standalone === true
     );
 
-    setIsIos(/iPad|iPhone|iPod/.test(navigator.userAgent));
+    // 判定は browser.ts に集約している（テスト済み）
+    const { isIos: ios, isIosNonSafari: iosOther } = detectBrowser(
+      navigator.userAgent
+    );
+    setIsIos(ios);
+    setIsIosNonSafari(iosOther);
 
     // 既に購読済みか確認する
     if (supported) {
@@ -125,7 +132,10 @@ export function usePushNotification() {
     subscribed,
     busy,
     // iOS はホーム画面に追加しないと通知を許可できない
-    needsInstall: isIos && !isStandalone,
+    needsInstall: isIos && !isStandalone && !isIosNonSafari,
+    // iPhone の Chrome などでは、そもそも追加ができないため
+    // Safari で開き直してもらう必要がある
+    needsSafari: isIosNonSafari,
     isStandalone,
     subscribe,
     unsubscribe,

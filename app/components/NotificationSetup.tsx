@@ -1,7 +1,8 @@
 'use client';
 
-import { useSyncExternalStore, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { usePushNotification } from '@/app/hooks/usePushNotification';
+import { useInstallPrompt } from '@/app/hooks/useInstallPrompt';
 import Button from '@/app/components/ui/Button';
 
 const DISMISS_KEY = 'notification-prompt-dismissed';
@@ -25,9 +26,9 @@ function getDismissed(): boolean {
 /**
  * 通知を有効にしてもらうための案内。
  *
- * シフトの割当に気づいてもらうことが目的なので、
- * まだ許可していない人にだけ出す。
- * 閉じたら当面出さない（毎回出ると煩わしいため）。
+ * ブラウザによって必要な手順が違う:
+ *   Chrome / Edge — そのまま通知を許可できる。アプリとしても入れられる
+ *   Safari (iOS)  — ホーム画面に追加しないと通知を許可できない
  */
 export default function NotificationSetup() {
   const {
@@ -35,10 +36,11 @@ export default function NotificationSetup() {
     subscribed,
     busy,
     needsInstall,
+    needsSafari,
     subscribe,
   } = usePushNotification();
+  const { canInstall, installed, install } = useInstallPrompt();
 
-  // localStorage は表示制御にのみ使う。打刻の状態には使わない。
   const stored = useSyncExternalStore(
     subscribeToDismiss,
     getDismissed,
@@ -52,75 +54,133 @@ export default function NotificationSetup() {
     setClosedNow(true);
   };
 
-  // 既に有効・非対応・拒否済み・閉じた後は出さない
-  if (
-    dismissed ||
-    subscribed ||
-    permission === 'unsupported' ||
-    permission === 'denied'
-  ) {
+  if (dismissed || permission === 'unsupported' || permission === 'denied') {
     return null;
   }
 
-  // iOS はホーム画面に追加しないと通知を許可できない
+  // 通知は有効。あとはアプリとして入れられるなら勧める。
+  if (subscribed) {
+    if (!canInstall || installed) return null;
+
+    return (
+      <Banner onClose={close}>
+        <p className="text-sm font-bold text-blue-900">
+          アプリとして使えます
+        </p>
+        <p className="text-xs text-blue-700 mt-1">
+          ホーム画面に追加すると、すぐ開けて全画面で使えます
+        </p>
+        <Button
+          size="md"
+          fullWidth
+          className="mt-3"
+          onClick={async () => {
+            const ok = await install();
+            if (!ok) close();
+          }}
+        >
+          ホーム画面に追加
+        </Button>
+      </Banner>
+    );
+  }
+
+  // iPhone の Chrome などは中身が Safari だが「ホーム画面に追加」が
+  // 使えず、通知を有効にできない。Safari で開き直してもらう。
+  if (needsSafari) {
+    return (
+      <Banner onClose={close}>
+        <p className="text-sm font-bold text-blue-900">
+          通知には Safari が必要です
+        </p>
+        <p className="text-xs text-blue-700 mt-1.5 leading-relaxed">
+          iPhone では Safari で開いた場合のみ通知を設定できます。
+          このページを Safari で開き直してから、
+          「ホーム画面に追加」してください。
+        </p>
+        <button
+          onClick={() => {
+            void navigator.clipboard
+              ?.writeText(window.location.href)
+              .catch(() => {});
+          }}
+          className="mt-2.5 text-xs font-semibold text-blue-700 underline"
+        >
+          このページのURLをコピー
+        </button>
+      </Banner>
+    );
+  }
+
+  // iOS は先にホーム画面へ追加しないと通知を許可できない
   if (needsInstall) {
     return (
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-blue-900">
-              シフトの通知を受け取る
-            </p>
-            <p className="text-xs text-blue-700 mt-1.5 leading-relaxed">
-              下の共有ボタン
-              <span className="inline-block mx-1 font-bold">⬆</span>
-              から「ホーム画面に追加」すると、
-              シフトが割り当てられたときに通知が届きます。
-            </p>
-          </div>
-          <button
-            onClick={close}
-            className="shrink-0 text-blue-400 hover:text-blue-600 text-lg leading-none px-1"
-            aria-label="閉じる"
-          >
-            ×
-          </button>
-        </div>
-      </div>
+      <Banner onClose={close}>
+        <p className="text-sm font-bold text-blue-900">
+          シフトの通知を受け取る
+        </p>
+        <p className="text-xs text-blue-700 mt-1.5 leading-relaxed">
+          画面下の共有ボタン
+          <span className="inline-block mx-1 font-bold">⬆</span>
+          をタップし、「ホーム画面に追加」を選んでください。
+          追加後にこの画面を開くと、通知を有効にできます。
+        </p>
+      </Banner>
     );
   }
 
   return (
+    <Banner onClose={close}>
+      <p className="text-sm font-bold text-blue-900">
+        シフトの通知を受け取りますか？
+      </p>
+      <p className="text-xs text-blue-700 mt-1">
+        シフトが割り当てられたときにお知らせします
+      </p>
+
+      <div className="flex gap-2 mt-3">
+        <Button
+          size="md"
+          fullWidth
+          loading={busy}
+          onClick={async () => {
+            const ok = await subscribe();
+            if (!ok) close();
+          }}
+        >
+          通知を有効にする
+        </Button>
+
+        {/* Chrome などインストール可能な環境では同時に勧める */}
+        {canInstall && !installed && (
+          <Button size="md" variant="secondary" onClick={install}>
+            追加
+          </Button>
+        )}
+      </div>
+    </Banner>
+  );
+}
+
+function Banner({
+  children,
+  onClose,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
     <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-blue-900">
-            シフトの通知を受け取りますか？
-          </p>
-          <p className="text-xs text-blue-700 mt-1">
-            シフトが割り当てられたときにお知らせします
-          </p>
-        </div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">{children}</div>
         <button
-          onClick={close}
+          onClick={onClose}
           className="shrink-0 text-blue-400 hover:text-blue-600 text-lg leading-none px-1"
           aria-label="閉じる"
         >
           ×
         </button>
       </div>
-
-      <Button
-        size="md"
-        fullWidth
-        loading={busy}
-        onClick={async () => {
-          const ok = await subscribe();
-          if (!ok) close();
-        }}
-      >
-        通知を有効にする
-      </Button>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import type {
   MonthlySalary,
   Property,
   Reservation,
+  ReservationType,
   Shift,
   UserProfile,
   WorkSession,
@@ -15,6 +16,7 @@ import {
   toHourlyWage,
   toProperty,
   toReservation,
+  toReservationType,
   toSettings,
   toShift,
   toWorkSession,
@@ -113,14 +115,14 @@ export const getCalendarData = cache(async (month: string) => {
   const { supabase, profile } = await requireUser();
   const { from, to } = monthRange(month);
 
-  const [reservationsRes, propertiesRes, shiftsRes, usersRes] =
+  const [reservationsRes, propertiesRes, shiftsRes, usersRes, typesRes] =
     await Promise.all([
       supabase
         .from('reservations')
         .select('*')
         .eq('status', 'confirmed')
         .lte('check_in', to)
-        .gt('check_out', from)
+        .gte('check_out', from)
         .order('check_in'),
       supabase
         .from('properties')
@@ -134,12 +136,18 @@ export const getCalendarData = cache(async (month: string) => {
         .lte('shift_date', to)
         .order('shift_date'),
       supabase.rpc('list_staff_names'),
+      supabase
+        .from('reservation_types')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_order'),
     ]);
 
   return {
     reservations: (reservationsRes.data ?? []).map(toReservation) as Reservation[],
     properties: (propertiesRes.data ?? []).map(toProperty) as Property[],
     shifts: (shiftsRes.data ?? []).map(toShift) as Shift[],
+    types: (typesRes.data ?? []).map(toReservationType) as ReservationType[],
     users: ((usersRes.data ?? []) as { id: string; name: string }[]).map(
       (u): UserProfile => ({
         id: u.id,

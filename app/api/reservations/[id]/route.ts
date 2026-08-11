@@ -1,18 +1,71 @@
 import { NextResponse } from 'next/server';
-import { requireAdmin } from '@/app/lib/api/auth';
+import { requireAdmin, requireUser } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
-import { toReservation } from '@/app/lib/api/mappers';
+import { toReservation, toShift } from '@/app/lib/api/mappers';
 import {
   dateStr,
   int,
   optionalStr,
   optionalTime,
+  optionalUuid,
   readBody,
   uuid,
 } from '@/app/lib/api/validate';
 
 type Params = { params: Promise<{ id: string }> };
 
+/** 予約の詳細（紐づくシフトも含む） */
+export async function GET(_request: Request, { params }: Params) {
+  try {
+    const { supabase } = await requireUser();
+    const { id } = await params;
+    const reservationId = uuid(id, 'id');
+
+    const [resRes, shiftsRes] = await Promise.all([
+      supabase
+        .from('reservations')
+        .select('*')
+        .eq('id', reservationId)
+        .maybeSingle(),
+      supabase
+        .from('shifts')
+        .select('*')
+        .eq('reservation_id', reservationId)
+        .order('shift_date'),
+    ]);
+
+    if (!resRes.data) throw new ApiError('NOT_FOUND');
+
+    return NextResponse.json({
+      reservation: toReservation(resRes.data),
+      shifts: (shiftsRes.data ?? []).map(toShift),
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+function parseShifts(raw: unknown) {
+  if (!Array.isArray(raw)) return [];
+
+  return raw.map((item) => {
+    const o = (item ?? {}) as Record<string, unknown>;
+    return {
+      date: dateStr(o.date, '日付'),
+      userId: optionalUuid(o.userId, '担当者'),
+      startTime: optionalTime(o.startTime, '入り時間'),
+      endTime: optionalTime(o.endTime, '終了時間'),
+      note: optionalStr(o.note, 'メモ', 500),
+    };
+  });
+}
+
+/**
+ * 予約の更新。シフトも入れ替える。
+ *
+ * 既に承諾済みのシフトは、同じ担当者・同じ日であれば
+ * 回答状況を引き継ぐ（時刻だけ直したときに承諾が消えないように）。
+ */
 export async function PATCH(request: Request, { params }: Params) {
   try {
     const { supabase } = await requireAdmin();
@@ -20,59 +73,34 @@ export async function PATCH(request: Request, { params }: Params) {
     const reservationId = uuid(id, 'id');
     const body = await readBody(request);
 
-    // 片方の日付だけ更新した場合も整合を検査できるよう既存値を読む
-    const { data: existing } = await supabase
-      .from('reservations')
-      .select('check_in, check_out')
-      .eq('id', reservationId)
-      .maybeSingle();
+    const checkIn = dateStr(body.checkIn, '開始日');
+    const checkOut = dateStr(body.checkOut, '終了日');
 
-    if (!existing) throw new ApiError('NOT_FOUND');
-
-    const patch: Record<string, unknown> = {};
-
-    if (body.propertyId !== undefined) patch.property_id = uuid(body.propertyId, '棟');
-    if (body.guestName !== undefined) {
-      patch.guest_name = optionalStr(body.guestName, '予約者名', 100) ?? '';
-    }
-    if (body.guestCount !== undefined) {
-      patch.guest_count = int(body.guestCount, '人数', { min: 1, max: 100 });
-    }
-    if (body.checkIn !== undefined) patch.check_in = dateStr(body.checkIn, 'チェックイン日');
-    if (body.checkOut !== undefined) patch.check_out = dateStr(body.checkOut, 'チェックアウト日');
-    if (body.checkInTime !== undefined) {
-      patch.check_in_time = optionalTime(body.checkInTime, 'チェックイン時刻');
-    }
-    if (body.checkOutTime !== undefined) {
-      patch.check_out_time = optionalTime(body.checkOutTime, 'チェックアウト時刻');
-    }
-    if (body.source !== undefined) patch.source = optionalStr(body.source, '予約元', 50);
-    if (body.contact !== undefined) patch.contact = optionalStr(body.contact, '連絡先', 200);
-    if (body.note !== undefined) patch.note = optionalStr(body.note, 'メモ', 2000);
-    if (body.status !== undefined) {
-      patch.status = body.status === 'cancelled' ? 'cancelled' : 'confirmed';
-    }
-
-    // 変更後の姿で検査する
-    const nextCheckIn = (patch.check_in as string) ?? existing.check_in;
-    const nextCheckOut = (patch.check_out as string) ?? existing.check_out;
-
-    if (nextCheckOut <= nextCheckIn) {
+    if (checkOut < checkIn) {
       throw new ApiError(
         'VALIDATION_ERROR',
-        'チェックアウト日はチェックイン日より後にしてください'
+        '終了日は開始日以降にしてください'
       );
     }
 
-    const { data, error } = await supabase
-      .from('reservations')
-      .update(patch)
-      .eq('id', reservationId)
-      .select()
-      .single();
+    const { data, error } = await supabase.rpc(
+      'update_reservation_with_shifts',
+      {
+        p_reservation_id: reservationId,
+        p_property_id: uuid(body.propertyId, '棟'),
+        p_type_id: uuid(body.typeId, '種別'),
+        p_check_in: checkIn,
+        p_check_out: checkOut,
+        p_guest_count:
+          body.guestCount === undefined || body.guestCount === null
+            ? 0
+            : int(body.guestCount, '人数', { min: 0, max: 100 }),
+        p_note: optionalStr(body.note, 'メモ', 2000),
+        p_shifts: parseShifts(body.shifts),
+      }
+    );
 
     if (error) throw error;
-    if (!data) throw new ApiError('NOT_FOUND');
 
     return NextResponse.json({ reservation: toReservation(data) });
   } catch (error) {
@@ -80,11 +108,12 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 }
 
-export async function DELETE(request: Request, { params }: Params) {
+export async function DELETE(_request: Request, { params }: Params) {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
 
+    // 紐づくシフトは ON DELETE CASCADE で一緒に消える
     const { error } = await supabase
       .from('reservations')
       .delete()

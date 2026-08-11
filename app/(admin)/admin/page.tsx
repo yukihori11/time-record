@@ -7,7 +7,9 @@ import {
   toHourlyWage,
   toProperty,
   toReservation,
+  toReservationType,
   toSettings,
+  toShift,
   toWorkSession,
 } from '@/app/lib/api/mappers';
 import { calcMonthlySalary, DEFAULT_SETTINGS } from '@/app/lib/domain/payroll';
@@ -38,6 +40,8 @@ async function loadDashboard() {
     settingsRes,
     reservationsRes,
     propertiesRes,
+    typesRes,
+    shiftsRes,
   ] = await Promise.all([
     supabase.from('users').select('id, name, email').order('name'),
     supabase
@@ -52,12 +56,22 @@ async function loadDashboard() {
       .select('*')
       .eq('status', 'confirmed')
       .lte('check_in', to)
-      .gt('check_out', from),
+      .gte('check_out', from),
     supabase
       .from('properties')
       .select('*')
       .eq('is_active', true)
       .order('display_order'),
+    supabase
+      .from('reservation_types')
+      .select('*')
+      .eq('is_active', true)
+      .order('display_order'),
+    supabase
+      .from('shifts')
+      .select('*')
+      .gte('shift_date', from)
+      .lte('shift_date', to),
   ]);
 
   const settings = settingsRes.data
@@ -92,6 +106,8 @@ async function loadDashboard() {
     grandTotal: salaries.reduce((sum, r) => sum + r.salary.totalAmount, 0),
     reservations: (reservationsRes.data ?? []).map(toReservation),
     properties: (propertiesRes.data ?? []).map(toProperty),
+    types: (typesRes.data ?? []).map(toReservationType),
+    shifts: (shiftsRes.data ?? []).map(toShift),
     staleCount: allSessions.filter(
       (s) => s.clockOut === null && s.clockIn.getTime() < twelveHoursAgo
     ).length,

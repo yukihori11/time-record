@@ -1,7 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { PayrollSettings, Property, UserProfile } from '@/app/types/domain';
+import type {
+  PayrollSettings,
+  Property,
+  ReservationType,
+  UserProfile,
+} from '@/app/types/domain';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { formatYen } from '@/app/lib/domain/format';
 import { amountFromMinutes } from '@/app/lib/domain/payroll';
@@ -20,6 +25,7 @@ export default function SettingsView() {
   const { user: me, reload } = useAuth();
   const [settings, setSettings] = useState<PayrollSettings | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [types, setTypes] = useState<ReservationType[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -28,13 +34,15 @@ export default function SettingsView() {
 
   const load = useCallback(async () => {
     try {
-      const [settingsRes, propRes, userRes] = await Promise.all([
+      const [settingsRes, propRes, typeRes, userRes] = await Promise.all([
         api.get<{ settings: PayrollSettings }>('/api/admin/settings'),
         api.get<{ properties: Property[] }>('/api/properties?all=1'),
+        api.get<{ types: ReservationType[] }>('/api/reservation-types?all=1'),
         api.get<{ users: UserProfile[] }>('/api/users'),
       ]);
       setSettings(settingsRes.settings);
       setProperties(propRes.properties);
+      setTypes(typeRes.types);
       setUsers(userRes.users);
       setError(null);
     } catch (err) {
@@ -200,6 +208,9 @@ export default function SettingsView() {
       {/* 棟の管理 */}
       <PropertySection properties={properties} onChanged={load} />
 
+      {/* 予定の種別 */}
+      <TypeSection types={types} onChanged={load} />
+
       {/* 権限 */}
       <Card className="p-4">
         <h2 className="font-bold text-slate-900 mb-3">スタッフと権限</h2>
@@ -358,6 +369,165 @@ function PropertySection({
         <Button type="submit" loading={adding} disabled={!name}>
           追加
         </Button>
+      </form>
+    </Card>
+  );
+}
+
+/**
+ * 予定の種別（宿泊・清掃など）。
+ * 運用に合わせて増やせるようにしている。
+ */
+function TypeSection({
+  types,
+  onChanged,
+}: {
+  types: ReservationType[];
+  onChanged: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [color, setColor] = useState('#8b5cf6');
+  const [icon, setIcon] = useState('');
+  const [hasGuests, setHasGuests] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdding(true);
+    setError(null);
+    try {
+      await api.post('/api/reservation-types', {
+        name,
+        color,
+        icon,
+        hasGuests,
+        displayOrder: types.length + 1,
+      });
+      setName('');
+      setIcon('');
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const update = async (id: string, patch: Record<string, unknown>) => {
+    setError(null);
+    try {
+      await api.patch(`/api/reservation-types/${id}`, patch);
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <h2 className="font-bold text-slate-900 mb-1">予定の種別</h2>
+      <p className="text-xs text-slate-500 mb-3">
+        カレンダーの色分けに使います。「客あり」は宿泊人数を入力する種別です。
+      </p>
+      <ErrorBanner message={error} />
+
+      <ul className="space-y-2 mb-4">
+        {types.map((t) => (
+          <li
+            key={t.id}
+            className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50"
+          >
+            <input
+              type="color"
+              value={t.color}
+              onChange={(e) => update(t.id, { color: e.target.value })}
+              className="w-8 h-8 rounded-lg border-0 cursor-pointer shrink-0"
+              aria-label={`${t.name}の色`}
+            />
+            <input
+              defaultValue={t.icon}
+              onBlur={(e) => {
+                if (e.target.value !== t.icon) {
+                  update(t.id, { icon: e.target.value });
+                }
+              }}
+              className="w-10 text-center bg-transparent text-lg px-1 py-1 rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+              aria-label="アイコン"
+            />
+            <input
+              defaultValue={t.name}
+              onBlur={(e) => {
+                if (e.target.value !== t.name) {
+                  update(t.id, { name: e.target.value });
+                }
+              }}
+              className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-slate-800 px-1 py-1 rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            <span
+              className={`text-xs px-2 py-1 rounded-lg font-semibold shrink-0 ${
+                t.hasGuests
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-slate-200 text-slate-500'
+              }`}
+            >
+              {t.hasGuests ? '客あり' : '作業'}
+            </span>
+            <button
+              onClick={() => update(t.id, { isActive: !t.isActive })}
+              className={`text-xs px-2 py-1.5 rounded-lg font-semibold shrink-0 ${
+                t.isActive
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-slate-200 text-slate-500'
+              }`}
+            >
+              {t.isActive ? '使用中' : '停止'}
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <form onSubmit={add} className="space-y-2">
+        <div className="flex gap-2 items-end">
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="w-11 h-11 rounded-lg border-0 cursor-pointer shrink-0"
+            aria-label="色"
+          />
+          <input
+            value={icon}
+            onChange={(e) => setIcon(e.target.value)}
+            placeholder="🔑"
+            maxLength={2}
+            className="w-14 text-center px-2 py-3 rounded-xl border border-slate-300 bg-white text-lg"
+            aria-label="アイコン"
+          />
+          <div className="flex-1">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="鍵の受け渡し"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 items-center">
+          <label className="flex items-center gap-2 text-sm text-slate-600 flex-1">
+            <input
+              type="checkbox"
+              checked={hasGuests}
+              onChange={(e) => setHasGuests(e.target.checked)}
+              className="w-4 h-4"
+            />
+            お客さんが滞在する
+          </label>
+          <Button type="submit" loading={adding} disabled={!name}>
+            追加
+          </Button>
+        </div>
       </form>
     </Card>
   );

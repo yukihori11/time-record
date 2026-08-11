@@ -4,12 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   Property,
   Reservation,
+  ReservationType,
   Shift,
   UserProfile,
 } from '@/app/types/domain';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
-import { monthDays, todayJst } from '@/app/lib/domain/datetime';
-import { buildOccupancy } from '@/app/lib/domain/occupancy';
+import { todayJst } from '@/app/lib/domain/datetime';
+import { buildDayDetail, buildWeeks } from '@/app/lib/domain/occupancy';
 import MonthNav from '@/app/components/MonthNav';
 import { ErrorBanner, Spinner } from '@/app/components/ui/Feedback';
 import Button from '@/app/components/ui/Button';
@@ -21,6 +22,7 @@ interface CalendarData {
   reservations: Reservation[];
   properties: Property[];
   shifts: Shift[];
+  types: ReservationType[];
   users: UserProfile[];
 }
 
@@ -41,34 +43,19 @@ export default function CalendarView({
   const [selectedDate, setSelectedDate] = useState<string | null>(() =>
     todayJst()
   );
-  const [reservations, setReservations] = useState<Reservation[]>(
-    initialData.reservations
-  );
-  const [properties, setProperties] = useState<Property[]>(
-    initialData.properties
-  );
-  const [shifts, setShifts] = useState<Shift[]>(initialData.shifts);
-  const [users, setUsers] = useState<UserProfile[]>(initialData.users);
+  const [data, setData] = useState<CalendarData>(initialData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Reservation | null>(null);
 
-  // 4本のAPIを叩くとその回数だけ認証が走るため、1本にまとめている
   const load = useCallback(async (targetMonth: string) => {
     setLoading(true);
     try {
-      const data = await api.get<{
-        reservations: Reservation[];
-        properties: Property[];
-        shifts: Shift[];
-        users: UserProfile[];
-      }>(`/api/calendar?month=${targetMonth}`);
-
-      setReservations(data.reservations);
-      setProperties(data.properties);
-      setShifts(data.shifts);
-      setUsers(data.users);
+      const res = await api.get<CalendarData>(
+        `/api/calendar?month=${targetMonth}`
+      );
+      setData(res);
       setError(null);
     } catch (err) {
       setError(errorMessage(err));
@@ -83,17 +70,38 @@ export default function CalendarView({
     void load(month);
   }, [month, initialMonth, load]);
 
-  const days = useMemo(
-    () => buildOccupancy(monthDays(month), reservations, properties, shifts),
-    [month, reservations, properties, shifts]
+  // 連泊を日付またぎの帯にするため、週単位に組み直す
+  const weeks = useMemo(
+    () => buildWeeks(month, data.reservations, data.properties, data.types),
+    [month, data.reservations, data.properties, data.types]
   );
 
-  const selectedDay = days.find((d) => d.date === selectedDate) ?? null;
+  const detail = useMemo(
+    () =>
+      selectedDate
+        ? buildDayDetail(
+            selectedDate,
+            data.reservations,
+            data.properties,
+            data.types,
+            data.shifts
+          )
+        : null,
+    [selectedDate, data]
+  );
 
   const handleMonthChange = (m: string) => {
     setMonth(m);
     setSelectedDate(null);
   };
+
+  // 未回答・辞退の件数（管理者向け）
+  const pendingCount = data.shifts.filter(
+    (s) => s.status === 'assigned'
+  ).length;
+  const declinedCount = data.shifts.filter(
+    (s) => s.status === 'declined'
+  ).length;
 
   return (
     <div className="space-y-4">
@@ -101,19 +109,34 @@ export default function CalendarView({
 
       <ErrorBanner message={error} />
 
-      {/* 棟の凡例 */}
-      {properties.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {properties.map((p) => (
+      {isAdmin && (pendingCount > 0 || declinedCount > 0) && (
+        <div className="flex gap-2 text-xs font-semibold">
+          {pendingCount > 0 && (
+            <span className="px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
+              未回答 {pendingCount}件
+            </span>
+          )}
+          {declinedCount > 0 && (
+            <span className="px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200">
+              辞退 {declinedCount}件
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* 種別の凡例 */}
+      {data.types.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {data.types.map((t) => (
             <span
-              key={p.id}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200"
+              key={t.id}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 bg-white px-2 py-1.5 rounded-lg border border-slate-200"
             >
               <span
                 className="w-2.5 h-2.5 rounded-full"
-                style={{ backgroundColor: p.color }}
+                style={{ backgroundColor: t.color }}
               />
-              {p.name}
+              {t.icon} {t.name}
             </span>
           ))}
         </div>
@@ -124,8 +147,8 @@ export default function CalendarView({
       ) : (
         <>
           <CalendarGrid
-            month={month}
-            days={days}
+            weeks={weeks}
+            shifts={data.shifts}
             onSelect={setSelectedDate}
             selectedDate={selectedDate}
           />
@@ -139,16 +162,15 @@ export default function CalendarView({
                 setFormOpen(true);
               }}
             >
-              ＋ 予約を追加
+              ＋ 予定を追加
             </Button>
           )}
 
-          {selectedDay && (
+          {detail && (
             <DayDetail
-              day={selectedDay}
-              reservations={reservations}
-              properties={properties}
-              users={users}
+              detail={detail}
+              properties={data.properties}
+              users={data.users}
               currentUserId={currentUserId}
               isAdmin={isAdmin}
               onChanged={() => load(month)}
@@ -163,7 +185,9 @@ export default function CalendarView({
 
       {formOpen && isAdmin && (
         <ReservationForm
-          properties={properties}
+          properties={data.properties}
+          types={data.types}
+          users={data.users}
           reservation={editing}
           defaultDate={selectedDate ?? todayJst()}
           onClose={() => {

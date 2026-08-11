@@ -66,19 +66,31 @@ export interface Property {
   displayOrder: number;
 }
 
+/** 予約の種別（宿泊・清掃・準備など）。管理画面で追加できる */
+export interface ReservationType {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  /** 客が滞在するか。false なら人数の入力を求めない */
+  hasGuests: boolean;
+  isActive: boolean;
+  displayOrder: number;
+}
+
+/**
+ * 予約 = 「どの棟で・いつ・何人・どんな用件か」。
+ * 客の個人情報は保持しない。
+ */
 export interface Reservation {
   id: string;
   propertyId: string;
-  guestName: string;
+  typeId: string;
   guestCount: number;
   checkIn: string; // YYYY-MM-DD
-  checkOut: string; // YYYY-MM-DD
-  checkInTime?: string | null;
-  checkOutTime?: string | null;
+  checkOut: string; // YYYY-MM-DD（作業のみの日は checkIn と同じ）
   nights: number;
   status: 'confirmed' | 'cancelled';
-  source?: string | null;
-  contact?: string | null;
   note?: string | null;
 }
 
@@ -88,12 +100,24 @@ export interface Shift {
   id: string;
   userId: string;
   propertyId: string | null;
+  /** 紐づく予約。単発のシフトなら null */
+  reservationId: string | null;
   shiftDate: string; // YYYY-MM-DD
+  /** バイト生の入り時間 */
   startTime: string | null; // HH:MM
   endTime: string | null;
   status: ShiftStatus;
   respondedAt: Date | null;
   declineReason?: string | null;
+  note?: string | null;
+}
+
+/** 予約フォームで指定する1日分のシフト */
+export interface ShiftAssignment {
+  date: string; // YYYY-MM-DD
+  userId: string | null; // null = この日はシフト無し
+  startTime: string | null;
+  endTime: string | null;
   note?: string | null;
 }
 

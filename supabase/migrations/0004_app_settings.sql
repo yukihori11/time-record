@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
   id                     INTEGER PRIMARY KEY DEFAULT 1,
   rounding_mode          TEXT NOT NULL DEFAULT 'up',
   rounding_minutes       INTEGER NOT NULL DEFAULT 15,
-  min_guaranteed_minutes INTEGER NOT NULL DEFAULT 120,
+  min_guaranteed_minutes INTEGER NOT NULL DEFAULT 60,
   updated_by             UUID REFERENCES public.users(id) ON DELETE SET NULL,
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT app_settings_singleton CHECK (id = 1),
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
 );
 
 INSERT INTO public.app_settings (id, rounding_mode, rounding_minutes, min_guaranteed_minutes)
-  VALUES (1, 'up', 15, 120)
+  VALUES (1, 'up', 15, 60)
   ON CONFLICT (id) DO NOTHING;
 
 DROP TRIGGER IF EXISTS trg_app_settings_updated_at ON public.app_settings;

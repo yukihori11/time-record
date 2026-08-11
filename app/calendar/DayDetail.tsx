@@ -1,9 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import type { Property, Reservation, Shift, UserProfile } from '@/app/types/domain';
-import type { DayOccupancy } from '@/app/lib/domain/occupancy';
-import { checkOutsOn } from '@/app/lib/domain/occupancy';
+import type {
+  Property,
+  Reservation,
+  Shift,
+  UserProfile,
+} from '@/app/types/domain';
+import type { DayDetailData } from '@/app/lib/domain/occupancy';
 import { formatDateJa } from '@/app/lib/domain/datetime';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import Button from '@/app/components/ui/Button';
@@ -11,8 +15,7 @@ import { Card, ErrorBanner } from '@/app/components/ui/Feedback';
 import { Field, Textarea } from '@/app/components/ui/Field';
 
 export default function DayDetail({
-  day,
-  reservations,
+  detail,
   properties,
   users,
   currentUserId,
@@ -20,8 +23,7 @@ export default function DayDetail({
   onChanged,
   onEditReservation,
 }: {
-  day: DayOccupancy;
-  reservations: Reservation[];
+  detail: DayDetailData;
   properties: Property[];
   users: UserProfile[];
   currentUserId: string;
@@ -29,30 +31,33 @@ export default function DayDetail({
   onChanged: () => void;
   onEditReservation?: (reservation: Reservation) => void;
 }) {
-  const checkOuts = checkOutsOn(reservations, day.date);
   const propertyMap = new Map(properties.map((p) => [p.id, p]));
   const userMap = new Map(users.map((u) => [u.id, u]));
 
   return (
     <Card className="p-4 space-y-5">
       <div className="flex items-center justify-between">
-        <h2 className="font-bold text-slate-900">{formatDateJa(day.date)}</h2>
-        {day.totalGuests > 0 && (
+        <h2 className="font-bold text-slate-900">
+          {formatDateJa(detail.date)}
+        </h2>
+        {detail.totalGuests > 0 && (
           <span className="text-sm font-bold text-blue-600">
-            合計 {day.totalGuests}名
+            宿泊 {detail.totalGuests}名
           </span>
         )}
       </div>
 
-      {/* 宿泊中 */}
+      {/* その日の予定（宿泊・清掃・準備など） */}
       <section>
-        <h3 className="text-xs font-bold text-slate-500 mb-2">宿泊</h3>
-        {day.stays.length === 0 ? (
-          <p className="text-sm text-slate-400">宿泊予定はありません</p>
+        <h3 className="text-xs font-bold text-slate-500 mb-2">予定</h3>
+        {detail.reservations.length === 0 ? (
+          <p className="text-sm text-slate-400">予定はありません</p>
         ) : (
           <ul className="space-y-2">
-            {day.stays.map((stay) => {
-              const r = stay.reservation;
+            {detail.reservations.map((item) => {
+              const r = item.reservation;
+              const hasGuests = item.type?.hasGuests !== false;
+
               return (
                 <li
                   key={r.id}
@@ -60,44 +65,52 @@ export default function DayDetail({
                 >
                   <div
                     className="px-3 py-2 text-white text-sm font-bold flex justify-between items-center"
-                    style={{ backgroundColor: stay.property?.color ?? '#94a3b8' }}
+                    style={{ backgroundColor: item.type?.color ?? '#94a3b8' }}
                   >
-                    <span>{stay.property?.name ?? '棟不明'}</span>
-                    <span>{r.guestCount}名</span>
-                  </div>
-                  <div className="px-3 py-2.5 space-y-1 text-sm bg-white">
-                    {r.guestName && (
-                      <p className="font-semibold text-slate-800">{r.guestName}</p>
-                    )}
-                    <p className="text-slate-500 text-xs">
-                      {r.checkIn} 〜 {r.checkOut}（{r.nights}泊）
-                      <span className="ml-2 font-semibold text-slate-600">
-                        {stay.nightNumber}泊目
+                    <span>
+                      {item.type?.icon} {item.type?.name ?? '種別なし'}
+                      <span className="opacity-90 font-normal ml-2">
+                        {item.property?.name ?? '棟不明'}
                       </span>
-                    </p>
-                    {stay.isCheckIn && (
+                    </span>
+                    {hasGuests && r.guestCount > 0 && (
+                      <span>{r.guestCount}名</span>
+                    )}
+                  </div>
+
+                  <div className="px-3 py-2.5 space-y-1 text-sm bg-white">
+                    {/* 宿泊なら何泊目か、作業なら当日のみと分かるように */}
+                    {hasGuests && item.totalNights > 1 ? (
+                      <p className="text-slate-500 text-xs">
+                        {r.checkIn} 〜 {r.checkOut}（{item.totalNights}泊）
+                        <span className="ml-2 font-semibold text-slate-700">
+                          {item.nightNumber}泊目
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-slate-500 text-xs">
+                        {r.checkIn}
+                        {r.checkOut !== r.checkIn && ` 〜 ${r.checkOut}`}
+                      </p>
+                    )}
+
+                    {item.isStart && hasGuests && item.totalNights > 1 && (
                       <p className="text-xs text-emerald-600 font-semibold">
                         本日チェックイン
-                        {r.checkInTime && ` ${r.checkInTime.slice(0, 5)}`}
                       </p>
                     )}
-                    {stay.isLastNight && (
+                    {item.isLastNight && hasGuests && item.totalNights > 1 && (
                       <p className="text-xs text-blue-600 font-semibold">
-                        最終泊（翌日チェックアウト
-                        {r.checkOutTime && ` ${r.checkOutTime.slice(0, 5)}`}）
+                        最終泊（翌日チェックアウト）
                       </p>
                     )}
-                    {r.source && (
-                      <p className="text-xs text-slate-400">経路: {r.source}</p>
-                    )}
-                    {r.contact && (
-                      <p className="text-xs text-slate-400">連絡先: {r.contact}</p>
-                    )}
+
                     {r.note && (
                       <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-2 py-1.5 mt-1.5 whitespace-pre-wrap">
                         {r.note}
                       </p>
                     )}
+
                     {isAdmin && onEditReservation && (
                       <Button
                         size="sm"
@@ -117,13 +130,13 @@ export default function DayDetail({
       </section>
 
       {/* チェックアウト */}
-      {checkOuts.length > 0 && (
+      {detail.checkOuts.length > 0 && (
         <section>
           <h3 className="text-xs font-bold text-slate-500 mb-2">
             チェックアウト
           </h3>
           <ul className="space-y-1.5">
-            {checkOuts.map((r) => (
+            {detail.checkOuts.map((r) => (
               <li
                 key={r.id}
                 className="text-sm px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 flex justify-between"
@@ -131,22 +144,20 @@ export default function DayDetail({
                 <span className="font-semibold text-slate-700">
                   {propertyMap.get(r.propertyId)?.name ?? '棟不明'}
                 </span>
-                <span className="text-slate-500">
-                  {r.guestName || `${r.guestCount}名`}
-                  {r.checkOutTime && ` / ${r.checkOutTime.slice(0, 5)}`}
-                </span>
+                <span className="text-slate-500">{r.guestCount}名 退室</span>
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      {/* シフト */}
+      {/* この日に入るスタッフ */}
       <ShiftSection
-        shifts={day.shifts}
+        shifts={detail.shifts}
         properties={properties}
         userMap={userMap}
         currentUserId={currentUserId}
+        isAdmin={isAdmin}
         onChanged={onChanged}
       />
     </Card>
@@ -158,12 +169,14 @@ function ShiftSection({
   properties,
   userMap,
   currentUserId,
+  isAdmin,
   onChanged,
 }: {
   shifts: Shift[];
   properties: Property[];
   userMap: Map<string, UserProfile>;
   currentUserId: string;
+  isAdmin: boolean;
   onChanged: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -195,9 +208,24 @@ function ShiftSection({
     }
   };
 
+  const pending = shifts.filter((s) => s.status === 'assigned').length;
+  const declined = shifts.filter((s) => s.status === 'declined').length;
+
   return (
     <section>
-      <h3 className="text-xs font-bold text-slate-500 mb-2">シフト</h3>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-bold text-slate-500">この日に入る人</h3>
+        {isAdmin && (pending > 0 || declined > 0) && (
+          <span className="text-xs font-semibold">
+            {pending > 0 && (
+              <span className="text-amber-600">未回答{pending}</span>
+            )}
+            {pending > 0 && declined > 0 && ' / '}
+            {declined > 0 && <span className="text-red-500">辞退{declined}</span>}
+          </span>
+        )}
+      </div>
+
       <ErrorBanner message={error} />
 
       {shifts.length === 0 ? (
@@ -221,11 +249,11 @@ function ShiftSection({
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-slate-800 truncate">
-                      {userMap.get(shift.userId)?.name ||
-                        userMap.get(shift.userId)?.email ||
-                        'スタッフ'}
+                      {userMap.get(shift.userId)?.name || 'スタッフ'}
                       {isMine && (
-                        <span className="ml-1.5 text-xs text-blue-600">自分</span>
+                        <span className="ml-1.5 text-xs text-blue-600">
+                          自分
+                        </span>
                       )}
                     </p>
                     <p className="text-xs text-slate-500">
@@ -236,8 +264,12 @@ function ShiftSection({
                         />
                       )}
                       {property?.name ?? '棟未指定'}
-                      {shift.startTime && ` / ${shift.startTime}`}
-                      {shift.endTime && `〜${shift.endTime}`}
+                      {shift.startTime && (
+                        <span className="ml-1.5 font-semibold text-slate-700">
+                          {shift.startTime} 入り
+                        </span>
+                      )}
+                      {shift.endTime && ` 〜${shift.endTime}`}
                     </p>
                   </div>
                   <StatusBadge status={shift.status} />

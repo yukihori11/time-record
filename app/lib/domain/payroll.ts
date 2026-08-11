@@ -15,6 +15,7 @@ import { actualWorkMs, totalBreakMs } from './worktime';
  * ルール:
  *   実労働 = (退勤 − 出勤) − 休憩合計
  *   請求分 = max(最低保証, 15分単位に丸めた実労働)
+ *   （最低保証の既定は1時間。1時間未満の勤務でも1時間分を支給する）
  *   金額   = 請求分(分) / 60 × 時給   ← 円未満は切り捨て
  *
  * 丸めと最低保証は「1日あたり」で適用する。
@@ -27,7 +28,7 @@ import { actualWorkMs, totalBreakMs } from './worktime';
 export const DEFAULT_SETTINGS: PayrollSettings = {
   roundingMode: 'up',
   roundingMinutes: 15,
-  minGuaranteedMinutes: 120,
+  minGuaranteedMinutes: 60,
 };
 
 /** 分と時給から金額を出す。円未満は切り捨て。 */

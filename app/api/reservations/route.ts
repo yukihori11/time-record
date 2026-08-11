@@ -8,6 +8,7 @@ import {
   monthStr,
   optionalStr,
   optionalTime,
+  optionalUuid,
   readBody,
   uuid,
 } from '@/app/lib/api/validate';
@@ -16,8 +17,8 @@ import { monthRange } from '@/app/lib/domain/datetime';
 /**
  * 予約一覧。
  *
- * 月を指定すると、その月に「滞在が重なる」予約を返す。
- * 前月末チェックイン・当月チェックアウトの予約も含める必要があるため、
+ * 月を指定すると、その月に期間が重なる予約を返す。
+ * 前月末チェックイン・当月チェックアウトの予約も拾う必要があるため、
  * 単純な期間一致ではなく重なり判定で引く。
  */
 export async function GET(request: Request) {
@@ -38,13 +39,12 @@ export async function GET(request: Request) {
       to = dateStr(url.searchParams.get('to'), 'to');
     }
 
-    // check_in <= 期間末 かつ check_out > 期間頭 で重なりを判定
     const { data, error } = await supabase
       .from('reservations')
       .select('*')
       .eq('status', 'confirmed')
       .lte('check_in', to)
-      .gt('check_out', from)
+      .gte('check_out', from)
       .order('check_in');
 
     if (error) throw error;
@@ -57,43 +57,71 @@ export async function GET(request: Request) {
   }
 }
 
-// 予約の登録は管理者のみ（手動入力）
+/** 予約フォームから送られる1日分のシフト指定を検証する */
+function parseShifts(raw: unknown): {
+  date: string;
+  userId: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  note: string | null;
+}[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw.map((item) => {
+    const o = (item ?? {}) as Record<string, unknown>;
+    return {
+      date: dateStr(o.date, '日付'),
+      userId: optionalUuid(o.userId, '担当者'),
+      startTime: optionalTime(o.startTime, '入り時間'),
+      endTime: optionalTime(o.endTime, '終了時間'),
+      note: optionalStr(o.note, 'メモ', 500),
+    };
+  });
+}
+
+/**
+ * 予約の登録。シフトの割当も同時に行う。
+ *
+ * 予約だけ作られてシフトが失敗する状態を避けるため、
+ * DB側の関数で単一トランザクションとして処理する。
+ */
 export async function POST(request: Request) {
   try {
-    const { supabase, profile } = await requireAdmin();
+    const { supabase } = await requireAdmin();
     const body = await readBody(request);
 
-    const checkIn = dateStr(body.checkIn, 'チェックイン日');
-    const checkOut = dateStr(body.checkOut, 'チェックアウト日');
+    const checkIn = dateStr(body.checkIn, '開始日');
+    const checkOut = dateStr(body.checkOut, '終了日');
 
-    if (checkOut <= checkIn) {
+    if (checkOut < checkIn) {
       throw new ApiError(
         'VALIDATION_ERROR',
-        'チェックアウト日はチェックイン日より後にしてください'
+        '終了日は開始日以降にしてください'
       );
     }
 
-    const { data, error } = await supabase
-      .from('reservations')
-      .insert({
-        property_id: uuid(body.propertyId, '棟'),
-        guest_name: optionalStr(body.guestName, '予約者名', 100) ?? '',
-        guest_count: int(body.guestCount, '人数', { min: 1, max: 100 }),
-        check_in: checkIn,
-        check_out: checkOut,
-        check_in_time: optionalTime(body.checkInTime, 'チェックイン時刻'),
-        check_out_time: optionalTime(body.checkOutTime, 'チェックアウト時刻'),
-        source: optionalStr(body.source, '予約元', 50),
-        contact: optionalStr(body.contact, '連絡先', 200),
-        note: optionalStr(body.note, 'メモ', 2000),
-        created_by: profile.id,
-      })
-      .select()
-      .single();
+    const { data, error } = await supabase.rpc(
+      'create_reservation_with_shifts',
+      {
+        p_property_id: uuid(body.propertyId, '棟'),
+        p_type_id: uuid(body.typeId, '種別'),
+        p_check_in: checkIn,
+        p_check_out: checkOut,
+        p_guest_count:
+          body.guestCount === undefined || body.guestCount === null
+            ? 0
+            : int(body.guestCount, '人数', { min: 0, max: 100 }),
+        p_note: optionalStr(body.note, 'メモ', 2000),
+        p_shifts: parseShifts(body.shifts),
+      }
+    );
 
     if (error) throw error;
 
-    return NextResponse.json({ reservation: toReservation(data) }, { status: 201 });
+    return NextResponse.json(
+      { reservation: toReservation(data) },
+      { status: 201 }
+    );
   } catch (error) {
     return errorResponse(error);
   }

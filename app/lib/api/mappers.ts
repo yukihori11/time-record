@@ -6,6 +6,7 @@ import type {
   PayrollSettings,
   Property,
   Reservation,
+  ReservationType,
   Shift,
   WorkSession,
 } from '@/app/types/domain';
@@ -87,17 +88,25 @@ export function toReservation(row: any): Reservation {
   return {
     id: row.id,
     propertyId: row.property_id,
-    guestName: row.guest_name ?? '',
-    guestCount: row.guest_count,
+    typeId: row.type_id,
+    guestCount: row.guest_count ?? 0,
     checkIn: row.check_in,
     checkOut: row.check_out,
-    checkInTime: row.check_in_time ?? null,
-    checkOutTime: row.check_out_time ?? null,
-    nights: row.nights,
+    nights: row.nights ?? 0,
     status: row.status,
-    source: row.source ?? null,
-    contact: row.contact ?? null,
     note: row.note ?? null,
+  };
+}
+
+export function toReservationType(row: any): ReservationType {
+  return {
+    id: row.id,
+    name: row.name,
+    color: row.color,
+    icon: row.icon ?? '',
+    hasGuests: row.has_guests,
+    isActive: row.is_active,
+    displayOrder: row.display_order,
   };
 }
 
@@ -106,6 +115,7 @@ export function toShift(row: any): Shift {
     id: row.id,
     userId: row.user_id,
     propertyId: row.property_id ?? null,
+    reservationId: row.reservation_id ?? null,
     shiftDate: row.shift_date,
     startTime: row.start_time ? String(row.start_time).slice(0, 5) : null,
     endTime: row.end_time ? String(row.end_time).slice(0, 5) : null,

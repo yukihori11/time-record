@@ -13,9 +13,9 @@ const STAFF_ITEMS = [
 
 const ADMIN_ITEMS = [
   { href: '/admin', label: 'ホーム', icon: '🏠' },
-  { href: '/admin/shifts', label: 'シフト', icon: '📋' },
-  { href: '/calendar', label: '予約', icon: '📅' },
+  { href: '/calendar', label: '予定', icon: '📅' },
   { href: '/admin/attendance', label: '勤怠', icon: '⏱' },
+  { href: '/admin/salary', label: '給与', icon: '¥' },
   { href: '/admin/settings', label: '設定', icon: '⚙' },
 ];
 

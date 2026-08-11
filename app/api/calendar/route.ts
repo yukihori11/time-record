@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
-import { toProperty, toReservation, toShift } from '@/app/lib/api/mappers';
+import {
+  toProperty,
+  toReservation,
+  toReservationType,
+  toShift,
+} from '@/app/lib/api/mappers';
 import { monthStr } from '@/app/lib/api/validate';
 import { monthRange } from '@/app/lib/domain/datetime';
 
@@ -20,14 +25,14 @@ export async function GET(request: Request) {
     const month = monthStr(url.searchParams.get('month'), 'month');
     const { from, to } = monthRange(month);
 
-    const [reservationsRes, propertiesRes, shiftsRes, usersRes] =
+    const [reservationsRes, propertiesRes, shiftsRes, usersRes, typesRes] =
       await Promise.all([
         supabase
           .from('reservations')
           .select('*')
           .eq('status', 'confirmed')
           .lte('check_in', to)
-          .gt('check_out', from)
+          .gte('check_out', from)
           .order('check_in'),
         supabase
           .from('properties')
@@ -41,6 +46,11 @@ export async function GET(request: Request) {
           .lte('shift_date', to)
           .order('shift_date'),
         supabase.rpc('list_staff_names'),
+        supabase
+          .from('reservation_types')
+          .select('*')
+          .eq('is_active', true)
+          .order('display_order'),
       ]);
 
     if (reservationsRes.error) throw reservationsRes.error;
@@ -49,6 +59,7 @@ export async function GET(request: Request) {
       reservations: (reservationsRes.data ?? []).map(toReservation),
       properties: (propertiesRes.data ?? []).map(toProperty),
       shifts: (shiftsRes.data ?? []).map(toShift),
+      types: (typesRes.data ?? []).map(toReservationType),
       users: (usersRes.data ?? []).map((u: { id: string; name: string }) => ({
         id: u.id,
         email: '',

@@ -1,0 +1,364 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import type { PayrollSettings, Property, UserProfile } from '@/app/types/domain';
+import { api, errorMessage } from '@/app/lib/client/fetcher';
+import { formatYen } from '@/app/lib/domain/format';
+import { amountFromMinutes } from '@/app/lib/domain/payroll';
+import { roundMinutes } from '@/app/lib/domain/rounding';
+import { useAuth } from '@/app/contexts/AuthContext';
+import Button from '@/app/components/ui/Button';
+import { Field, Input, Select } from '@/app/components/ui/Field';
+import {
+  Card,
+  ErrorBanner,
+  SuccessBanner,
+  Spinner,
+} from '@/app/components/ui/Feedback';
+
+export default function SettingsView() {
+  const { user: me, reload } = useAuth();
+  const [settings, setSettings] = useState<PayrollSettings | null>(null);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [settingsRes, propRes, userRes] = await Promise.all([
+        api.get<{ settings: PayrollSettings }>('/api/admin/settings'),
+        api.get<{ properties: Property[] }>('/api/properties?all=1'),
+        api.get<{ users: UserProfile[] }>('/api/users'),
+      ]);
+      setSettings(settingsRes.settings);
+      setProperties(propRes.properties);
+      setUsers(userRes.users);
+      setError(null);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const saveSettings = async () => {
+    if (!settings) return;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await api.patch('/api/admin/settings', settings);
+      setSuccess('給与ルールを保存しました');
+      await reload();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changeRole = async (userId: string, role: 'admin' | 'staff') => {
+    setError(null);
+    setSuccess(null);
+    try {
+      await api.patch(`/api/admin/users/${userId}`, { role });
+      setSuccess('権限を変更しました');
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  const toggleActive = async (userId: string, isActive: boolean) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      await api.patch(`/api/admin/users/${userId}`, { isActive });
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  if (loading || !settings) return <Spinner />;
+
+  // 設定変更の影響が分かるよう、具体例で金額を出す
+  const preview = (minutes: number, wage = 1000) => {
+    const rounded = roundMinutes(
+      minutes,
+      settings.roundingMinutes,
+      settings.roundingMode
+    );
+    const billed = Math.max(settings.minGuaranteedMinutes, rounded);
+    return amountFromMinutes(billed, wage);
+  };
+
+  return (
+    <div className="space-y-4">
+      <ErrorBanner message={error} />
+      <SuccessBanner message={success} />
+
+      {/* 給与ルール */}
+      <Card className="p-4">
+        <h2 className="font-bold text-slate-900 mb-3">給与の計算ルール</h2>
+
+        <div className="space-y-3">
+          <Field
+            label="端数の扱い"
+            hint="切り上げはスタッフに有利、切り捨ては経営側に有利"
+          >
+            <Select
+              value={settings.roundingMode}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  roundingMode: e.target.value as 'up' | 'down',
+                })
+              }
+            >
+              <option value="up">切り上げ</option>
+              <option value="down">切り捨て</option>
+            </Select>
+          </Field>
+
+          <Field label="丸めの単位">
+            <Select
+              value={String(settings.roundingMinutes)}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  roundingMinutes: Number(e.target.value),
+                })
+              }
+            >
+              {[1, 5, 10, 15, 30, 60].map((m) => (
+                <option key={m} value={m}>
+                  {m}分
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field
+            label="最低保証時間（分）"
+            hint="1日あたり。短時間の勤務でもこの時間分は支給される"
+          >
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={1440}
+              step={15}
+              value={settings.minGuaranteedMinutes}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  minGuaranteedMinutes: Number(e.target.value),
+                })
+              }
+            />
+          </Field>
+        </div>
+
+        {/* 変更の影響をその場で確認できるようにする */}
+        <div className="mt-4 p-3 bg-slate-50 rounded-xl">
+          <p className="text-xs font-bold text-slate-600 mb-2">
+            時給1000円の場合の支給額
+          </p>
+          <ul className="space-y-1 text-sm">
+            {[80, 120, 130, 190, 310].map((minutes) => (
+              <li key={minutes} className="flex justify-between text-slate-600">
+                <span>
+                  {Math.floor(minutes / 60)}時間
+                  {minutes % 60 > 0 && `${minutes % 60}分`}
+                </span>
+                <span className="font-semibold tabular-nums">
+                  {formatYen(preview(minutes))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="text-xs text-amber-600 mt-3">
+          設定を変更すると過去の月の金額も変わります。
+        </p>
+
+        <Button fullWidth className="mt-3" loading={saving} onClick={saveSettings}>
+          保存する
+        </Button>
+      </Card>
+
+      {/* 棟の管理 */}
+      <PropertySection properties={properties} onChanged={load} />
+
+      {/* 権限 */}
+      <Card className="p-4">
+        <h2 className="font-bold text-slate-900 mb-3">スタッフと権限</h2>
+        <ul className="space-y-2">
+          {users.map((u) => (
+            <li
+              key={u.id}
+              className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-800 truncate">
+                  {u.name || u.email}
+                  {u.id === me?.id && (
+                    <span className="ml-1.5 text-xs text-blue-600">自分</span>
+                  )}
+                </p>
+                <p className="text-xs text-slate-400 truncate">{u.email}</p>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <select
+                  value={u.role}
+                  onChange={(e) =>
+                    changeRole(u.id, e.target.value as 'admin' | 'staff')
+                  }
+                  className="text-xs border border-slate-300 rounded-lg px-2 py-1.5 bg-white"
+                >
+                  <option value="staff">スタッフ</option>
+                  <option value="admin">管理者</option>
+                </select>
+
+                <button
+                  onClick={() => toggleActive(u.id, !u.isActive)}
+                  className={`text-xs px-2 py-1.5 rounded-lg font-semibold ${
+                    u.isActive
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-slate-200 text-slate-500'
+                  }`}
+                >
+                  {u.isActive ? '有効' : '無効'}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+function PropertySection({
+  properties,
+  onChanged,
+}: {
+  properties: Property[];
+  onChanged: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [color, setColor] = useState('#10b981');
+  const capacity = '4';
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdding(true);
+    setError(null);
+    try {
+      await api.post('/api/properties', {
+        name,
+        color,
+        capacity: Number(capacity),
+        displayOrder: properties.length + 1,
+      });
+      setName('');
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const update = async (id: string, patch: Record<string, unknown>) => {
+    setError(null);
+    try {
+      await api.patch(`/api/properties/${id}`, patch);
+      onChanged();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <h2 className="font-bold text-slate-900 mb-3">民泊の棟</h2>
+      <ErrorBanner message={error} />
+
+      <ul className="space-y-2 mb-4">
+        {properties.map((p) => (
+          <li
+            key={p.id}
+            className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50"
+          >
+            <input
+              type="color"
+              value={p.color}
+              onChange={(e) => update(p.id, { color: e.target.value })}
+              className="w-8 h-8 rounded-lg border-0 cursor-pointer shrink-0"
+              aria-label={`${p.name}の色`}
+            />
+            <input
+              defaultValue={p.name}
+              onBlur={(e) => {
+                if (e.target.value !== p.name) {
+                  update(p.id, { name: e.target.value });
+                }
+              }}
+              className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-slate-800 px-1 py-1 rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            <span className="text-xs text-slate-400 shrink-0">
+              定員{p.capacity ?? '—'}
+            </span>
+            <button
+              onClick={() => update(p.id, { isActive: !p.isActive })}
+              className={`text-xs px-2 py-1.5 rounded-lg font-semibold shrink-0 ${
+                p.isActive
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-slate-200 text-slate-500'
+              }`}
+            >
+              {p.isActive ? '運用中' : '停止'}
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <form onSubmit={add} className="flex gap-2 items-end">
+        <div className="flex-1">
+          <Field label="棟を追加">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="C棟"
+              required
+            />
+          </Field>
+        </div>
+        <input
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+          className="w-11 h-11 rounded-lg border-0 cursor-pointer shrink-0"
+          aria-label="色"
+        />
+        <Button type="submit" loading={adding} disabled={!name}>
+          追加
+        </Button>
+      </form>
+    </Card>
+  );
+}

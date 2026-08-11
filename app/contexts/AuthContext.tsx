@@ -1,86 +1,90 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import { useRouter } from 'next/navigation';
+import type { PayrollSettings, UserProfile } from '@/app/types/domain';
+import { api } from '@/app/lib/client/fetcher';
 
-interface UserProfile {
-  id: string;
-  email: string;
-  name?: string;
+interface MeResponse {
+  user: UserProfile;
+  currentWage: number | null;
+  settings: PayrollSettings | null;
 }
 
-interface AuthContextType {
+interface AuthContextValue {
   user: UserProfile | null;
+  currentWage: number | null;
+  settings: PayrollSettings | null;
   loading: boolean;
+  isAdmin: boolean;
+  reload: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  loading: true,
-  signOut: async () => {},
-});
+const AuthContext = createContext<AuthContextValue | null>(null);
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error('useAuth は AuthProvider の内側で使ってください');
   }
-  return context;
-};
+  return ctx;
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [currentWage, setCurrentWage] = useState<number | null>(null);
+  const [settings, setSettings] = useState<PayrollSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  const loadUserProfile = async (authUser: User) => {
-    // auth.users のメタデータから直接取得
-    const userProfile: UserProfile = {
-      id: authUser.id,
-      email: authUser.email || '',
-      name: authUser.user_metadata?.name || undefined,
-    };
-
-    setUser(userProfile);
-  };
-
-  useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        await loadUserProfile(session.user);
-      } else {
-        setUser(null);
-      }
+  const reload = useCallback(async () => {
+    try {
+      const data = await api.get<MeResponse>('/api/me');
+      setUser(data.user);
+      setCurrentWage(data.currentWage);
+      setSettings(data.settings);
+    } catch {
+      setUser(null);
+      setCurrentWage(null);
+      setSettings(null);
+    } finally {
       setLoading(false);
-    });
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        await loadUserProfile(session.user);
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }
   }, []);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-  };
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const signOut = useCallback(async () => {
+    try {
+      await api.post('/api/auth/logout');
+    } finally {
+      setUser(null);
+      router.push('/login');
+      router.refresh();
+    }
+  }, [router]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        currentWage,
+        settings,
+        loading,
+        isAdmin: user?.role === 'admin',
+        reload,
+        signOut,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

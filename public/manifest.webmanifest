@@ -1,0 +1,19 @@
+{
+  "name": "民泊 勤怠管理",
+  "short_name": "勤怠管理",
+  "description": "民泊スタッフの勤怠・給与・シフト・予約管理",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#ffffff",
+  "orientation": "portrait",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

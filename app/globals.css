@@ -1,26 +1,36 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* iOS でスクロール時にヘッダーが跳ねるのを抑える */
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans',
+    'Noto Sans JP', 'Yu Gothic', sans-serif;
+  /* iOS で入力欄をタップしたときの意図しないズームを防ぐため
+     フォントサイズは 16px を下回らせない */
+  font-size: 16px;
+}
+
+/* タップ時の青いハイライトを消す */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 数字の桁が揺れないように */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }

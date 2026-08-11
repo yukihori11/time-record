@@ -1,154 +1,93 @@
 'use client';
 
-import { supabase } from '../lib/supabase';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { api, errorMessage } from '@/app/lib/client/fetcher';
+import Button from '@/app/components/ui/Button';
+import { Field, Input } from '@/app/components/ui/Field';
+import { ErrorBanner } from '@/app/components/ui/Feedback';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
-  const [isSignUp, setIsSignUp] = useState(false);
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
-  useEffect(() => {
-    // Check if user is already logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        router.push('/');
-      }
-    });
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        router.push('/');
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [router]);
-
-  const handleSignIn = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     setLoading(true);
-    setError('');
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    }
-  };
-
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name: name,
-        },
-      },
-    });
-
-    if (error) {
-      setError(error.message);
+    try {
+      await api.post('/api/auth/login', { email, password });
+      const redirect = searchParams.get('redirect');
+      router.push(redirect && redirect.startsWith('/') ? redirect : '/');
+      router.refresh();
+    } catch (err) {
+      setError(errorMessage(err));
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
-        <h1 className="text-3xl font-bold text-black mb-8 text-center">
-          時間記録アプリ
-        </h1>
+    <div className="min-h-dvh flex items-center justify-center px-4 py-10 bg-slate-50">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-slate-900">民泊 勤怠管理</h1>
+          <p className="text-sm text-slate-500 mt-2">ログインしてください</p>
+        </div>
 
-        <form onSubmit={isSignUp ? handleSignUp : handleSignIn} className="space-y-4">
-          {isSignUp && (
-            <div>
-              <label className="block text-sm font-medium text-black mb-2">
-                名前
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-                placeholder="山田太郎"
-              />
-            </div>
-          )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <ErrorBanner message={error} />
 
-          <div>
-            <label className="block text-sm font-medium text-black mb-2">
-              メールアドレス
-            </label>
-            <input
+          <Field label="メールアドレス" required>
+            <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-              placeholder="email@example.com"
+              autoComplete="email"
+              inputMode="email"
+              placeholder="you@example.com"
             />
-          </div>
+          </Field>
 
-          <div>
-            <label className="block text-sm font-medium text-black mb-2">
-              パスワード
-            </label>
-            <input
+          <Field label="パスワード" required>
+            <Input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+              autoComplete="current-password"
               placeholder="••••••••"
             />
-          </div>
+          </Field>
 
-          {error && (
-            <div className="text-red-600 text-sm">{error}</div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-400"
-          >
-            {loading ? '処理中...' : isSignUp ? '新規登録' : 'ログイン'}
-          </button>
+          <Button type="submit" size="lg" fullWidth loading={loading}>
+            ログイン
+          </Button>
         </form>
 
-        <div className="mt-4 text-center">
-          <button
-            onClick={() => {
-              setIsSignUp(!isSignUp);
-              setError('');
-            }}
-            className="text-blue-500 hover:underline text-sm"
+        <div className="text-center mt-6">
+          <Link
+            href="/forgot-password"
+            className="text-sm text-blue-600 hover:text-blue-700 underline"
           >
-            {isSignUp
-              ? 'アカウントをお持ちの方はこちら'
-              : 'アカウントをお持ちでない方はこちら'}
-          </button>
+            パスワードをお忘れですか？
+          </Link>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin, requireUser } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { toSchedule, toShift } from '@/app/lib/api/mappers';
 import { notifyShiftAssignment } from '@/app/lib/server/shift-notify';
 import {
@@ -16,7 +17,7 @@ import {
 type Params = { params: Promise<{ id: string }> };
 
 /** 予定の詳細（担当スタッフも含む） */
-export async function GET(_request: Request, { params }: Params) {
+export const GET = withLogging('reservations.id.get', async (_request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireUser();
     const { id } = await params;
@@ -44,7 +45,7 @@ export async function GET(_request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
 function parseShifts(raw: unknown, scheduleDate: string) {
   if (!Array.isArray(raw)) return [];
@@ -67,7 +68,7 @@ function parseShifts(raw: unknown, scheduleDate: string) {
  * 既に承諾済みの人は、引き続き担当なら回答状況を引き継ぐ。
  * 時刻だけ直したときに承諾が消えないようにするため。
  */
-export async function PATCH(request: Request, { params }: Params) {
+export const PATCH = withLogging('reservations.id.patch', async (request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
@@ -117,9 +118,9 @@ export async function PATCH(request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function DELETE(_request: Request, { params }: Params) {
+export const DELETE = withLogging('reservations.id.delete', async (_request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
@@ -136,4 +137,4 @@ export async function DELETE(_request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

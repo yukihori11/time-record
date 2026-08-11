@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin, requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { toSchedule } from '@/app/lib/api/mappers';
 import {
   dateStr,
@@ -14,6 +15,7 @@ import {
 } from '@/app/lib/api/validate';
 import { monthRange } from '@/app/lib/domain/datetime';
 import { notifyShiftAssignment } from '@/app/lib/server/shift-notify';
+import { log } from '@/app/lib/api/logger';
 
 /**
  * 予定の一覧。
@@ -21,7 +23,7 @@ import { notifyShiftAssignment } from '@/app/lib/server/shift-notify';
  * 予定は1日で完結するため、期間の重なりを考える必要がない。
  * 指定した範囲の日付を素直に引くだけで済む。
  */
-export async function GET(request: Request) {
+export const GET = withLogging('reservations.get', async (request: Request) => {
   try {
     const { supabase } = await requireUser();
     const url = new URL(request.url);
@@ -55,7 +57,7 @@ export async function GET(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
 /** 予定フォームから送られる担当者の指定を検証する */
 function parseShifts(raw: unknown, scheduleDate: string) {
@@ -80,14 +82,21 @@ function parseShifts(raw: unknown, scheduleDate: string) {
  * 予定だけ作られてシフトが失敗する状態を避けるため、
  * DB側の関数で単一トランザクションとして処理する。
  */
-export async function POST(request: Request) {
+export const POST = withLogging('reservations.post', async (request: Request) => {
   try {
-    const { supabase } = await requireAdmin();
+    const { supabase, profile } = await requireAdmin();
     const body = await readBody(request);
 
     const propertyId = uuid(body.propertyId, '棟');
     const scheduleDate = dateStr(body.scheduleDate, '日付');
     const shifts = parseShifts(body.shifts, scheduleDate);
+
+    log.info('schedule.create', {
+      creatorId: profile.id,
+      propertyId,
+      scheduleDate,
+      assignedCount: shifts.filter((s) => s.userId).length,
+    });
 
     const { data, error } = await supabase.rpc('create_schedule_with_shifts', {
       p_property_id: propertyId,
@@ -117,4 +126,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

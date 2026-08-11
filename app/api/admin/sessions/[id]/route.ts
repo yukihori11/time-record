@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { SESSION_SELECT, toWorkSession } from '@/app/lib/api/mappers';
+import { log } from '@/app/lib/api/logger';
 import {
   enumValue,
   isoDate,
@@ -19,7 +21,7 @@ type Params = { params: Promise<{ id: string }> };
  *
  * 修正理由を必須にして、監査ログに何が起きたかを残す。
  */
-export async function PATCH(request: Request, { params }: Params) {
+export const PATCH = withLogging('admin.sessions.id.patch', async (request: Request, { params }: Params) => {
   try {
     const { supabase, profile } = await requireAdmin();
     const { id } = await params;
@@ -112,6 +114,23 @@ export async function PATCH(request: Request, { params }: Params) {
       patch.note = optionalStr(body.note, 'メモ', 500);
     }
 
+    // 勤怠の修正は給与に直結する。誰が何をどう変えたか必ず残す。
+    log.info('attendance.edit', {
+      editorId: profile.id,
+      editorName: profile.name,
+      sessionId,
+      before: {
+        clockIn: existing.clock_in,
+        clockOut: existing.clock_out,
+      },
+      after: {
+        clockIn: patch.clock_in ?? existing.clock_in,
+        clockOut:
+          'clock_out' in patch ? patch.clock_out : existing.clock_out,
+      },
+      reason: patch.edit_reason,
+    });
+
     const { data, error } = await supabase
       .from('work_sessions')
       .update(patch)
@@ -126,12 +145,19 @@ export async function PATCH(request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function DELETE(request: Request, { params }: Params) {
+export const DELETE = withLogging('admin.sessions.id.delete', async (_request: Request, { params }: Params) => {
   try {
-    const { supabase } = await requireAdmin();
+    const { supabase, profile } = await requireAdmin();
     const { id } = await params;
+
+    // 削除は取り返しがつかない。必ず記録する。
+    log.warn('attendance.delete', {
+      editorId: profile.id,
+      editorName: profile.name,
+      sessionId: uuid(id, 'id'),
+    });
 
     const { error } = await supabase
       .from('work_sessions')
@@ -144,4 +170,4 @@ export async function DELETE(request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

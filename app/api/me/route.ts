@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { toHourlyWage, toSettings } from '@/app/lib/api/mappers';
 import { currentWage } from '@/app/lib/domain/wage-history';
 import { todayJst } from '@/app/lib/domain/datetime';
@@ -8,7 +9,7 @@ import { todayJst } from '@/app/lib/domain/datetime';
 // 自分のプロフィールと現在の時給。
 // AuthContext が起動時に叩く。
 
-export async function GET() {
+export const GET = withLogging('me.get', async () => {
   try {
     const { supabase, profile } = await requireUser();
 
@@ -31,9 +32,9 @@ export async function GET() {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function PATCH(request: Request) {
+export const PATCH = withLogging('me.patch', async (request: Request) => {
   try {
     const { supabase, profile } = await requireUser();
     const body = await request.json();
@@ -61,4 +62,4 @@ export async function PATCH(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

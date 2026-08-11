@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { toReservationType } from '@/app/lib/api/mappers';
 import { int, optionalStr, readBody, str, uuid } from '@/app/lib/api/validate';
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function PATCH(request: Request, { params }: Params) {
+export const PATCH = withLogging('reservation-types.id.patch', async (request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
@@ -38,9 +39,9 @@ export async function PATCH(request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function DELETE(_request: Request, { params }: Params) {
+export const DELETE = withLogging('reservation-types.id.delete', async (_request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
@@ -57,4 +58,4 @@ export async function DELETE(_request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

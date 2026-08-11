@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 
 /**
  * スタッフ一覧。
@@ -10,7 +11,7 @@ import { errorResponse } from '@/app/lib/api/errors';
  * 一般ユーザーには「シフトに登場する人の表示名」だけを返す。
  * メールアドレスは管理者にのみ開示する。
  */
-export async function GET() {
+export const GET = withLogging('users.get', async () => {
   try {
     const { supabase, profile } = await requireUser();
 
@@ -69,4 +70,4 @@ export async function GET() {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

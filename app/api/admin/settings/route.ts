@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { toSettings } from '@/app/lib/api/mappers';
 import { enumValue, int, readBody } from '@/app/lib/api/validate';
+import { log } from '@/app/lib/api/logger';
 
 // 給与ルール（丸め方向・単位・最低保証）
-export async function GET() {
+export const GET = withLogging('admin.settings.get', async () => {
   try {
     const { supabase } = await requireAdmin();
 
@@ -21,9 +23,9 @@ export async function GET() {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function PATCH(request: Request) {
+export const PATCH = withLogging('admin.settings.patch', async (request: Request) => {
   try {
     const { supabase, profile } = await requireAdmin();
     const body = await readBody(request);
@@ -60,6 +62,13 @@ export async function PATCH(request: Request) {
       });
     }
 
+    // 給与ルールの変更は全員の金額に影響する。過去分も変わる。
+    log.warn('settings.payrollChanged', {
+      editorId: profile.id,
+      editorName: profile.name,
+      changes: patch,
+    });
+
     const { data, error } = await supabase
       .from('app_settings')
       .update(patch)
@@ -73,4 +82,4 @@ export async function PATCH(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

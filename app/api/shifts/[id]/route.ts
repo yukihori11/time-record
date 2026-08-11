@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { toShift } from '@/app/lib/api/mappers';
 import {
   dateStr,
@@ -15,7 +16,7 @@ import {
 type Params = { params: Promise<{ id: string }> };
 
 // 管理者によるシフトの変更
-export async function PATCH(request: Request, { params }: Params) {
+export const PATCH = withLogging('shifts.id.patch', async (request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
@@ -66,9 +67,9 @@ export async function PATCH(request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function DELETE(request: Request, { params }: Params) {
+export const DELETE = withLogging('shifts.id.delete', async (request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
@@ -84,4 +85,4 @@ export async function DELETE(request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

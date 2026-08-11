@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { createServerSupabase } from '@/app/lib/supabase/server';
+import { log } from '@/app/lib/api/logger';
 
 /**
  * メールリンクの受け口。
@@ -19,7 +20,14 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get('type') as EmailOtpType | null;
   const next = searchParams.get('next') ?? '/reset-password';
 
+  log.info('confirm.received', {
+    hasToken: Boolean(tokenHash),
+    type,
+    next,
+  });
+
   if (!tokenHash || !type) {
+    log.warn('confirm.missingToken', { url: request.nextUrl.search });
     return NextResponse.redirect(
       `${origin}/reset-password?error_description=${encodeURIComponent(
         'リンクが正しくありません'
@@ -35,12 +43,15 @@ export async function GET(request: NextRequest) {
   });
 
   if (error) {
+    log.warn('confirm.verifyFailed', { type, reason: error.message });
     return NextResponse.redirect(
       `${origin}/reset-password?error_description=${encodeURIComponent(
         'リンクの有効期限が切れています。もう一度招待を送ってもらってください'
       )}`
     );
   }
+
+  log.info('confirm.verified', { type, next });
 
   // セッションが張れた状態でパスワード設定画面へ
   return NextResponse.redirect(`${origin}${next}`);

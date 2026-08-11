@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { createAdminSupabase } from '@/app/lib/supabase/server';
 import { enumValue, optionalStr, readBody, str } from '@/app/lib/api/validate';
+import { log } from '@/app/lib/api/logger';
 
 /**
  * バイト生を追加する。
@@ -13,7 +15,7 @@ import { enumValue, optionalStr, readBody, str } from '@/app/lib/api/validate';
  * ユーザー作成は Auth の管理APIが必要なため、
  * ここだけ service_role キーを使う。
  */
-export async function POST(request: Request) {
+export const POST = withLogging('admin.users.post', async (request: Request) => {
   try {
     // 呼び出し元が管理者であることを先に確認する
     await requireAdmin();
@@ -41,6 +43,20 @@ export async function POST(request: Request) {
     }
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
+    const redirectTo = `${siteUrl}/auth/confirm?next=/reset-password`;
+
+    // リンク先を記録する。
+    // Supabase の Redirect URLs に未登録だと、この指定が
+    // 無視されトップページに書き換えられる。
+    // 「リンクを踏んだのにログイン画面に戻る」はこれが原因。
+    log.info('invite.send', { email, role, redirectTo, siteUrl });
+
+    if (siteUrl.includes('localhost')) {
+      log.warn('invite.localhost', {
+        message:
+          'NEXT_PUBLIC_SITE_URL が localhost です。本番ではリンクが開けません',
+      });
+    }
 
     const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
       data: { name },
@@ -59,6 +75,7 @@ export async function POST(request: Request) {
           'このメールアドレスは既に登録されています'
         );
       }
+      log.error('invite.failed', { email, reason: error.message });
       throw new ApiError('VALIDATION_ERROR', error.message);
     }
 
@@ -108,6 +125,8 @@ export async function POST(request: Request) {
       }
     }
 
+    log.info('invite.sent', { email, role, userId: data.user?.id });
+
     return NextResponse.json(
       {
         ok: true,
@@ -120,4 +139,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

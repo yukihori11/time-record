@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { monthStr } from '@/app/lib/api/validate';
 import { getCalendarData } from '@/app/lib/server/queries';
 
@@ -10,7 +11,7 @@ import { getCalendarData } from '@/app/lib/server/queries';
  * 初期表示は Server Component が同じ関数を直接使うため、
  * ここを経由しない（HTTPの往復が発生しない）。
  */
-export async function GET(request: Request) {
+export const GET = withLogging('calendar.get', async (request: Request) => {
   try {
     const url = new URL(request.url);
     const month = monthStr(url.searchParams.get('month'), 'month');
@@ -22,4 +23,4 @@ export async function GET(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

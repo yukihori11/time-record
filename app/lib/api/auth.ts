@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { UserProfile } from '@/app/types/domain';
 import { createServerSupabase } from '@/app/lib/supabase/server';
 import { ApiError } from './errors';
+import { log } from './logger';
 
 export interface AuthContext {
   supabase: SupabaseClient;
@@ -27,6 +28,11 @@ const resolveAuth = cache(async (): Promise<AuthContext> => {
   } = await supabase.auth.getUser();
 
   if (error || !user) {
+    // 未ログインは日常的に起きるので warn 止まり。
+    // ただし理由は残す（トークン切れか、そもそも無いのか）
+    log.warn('auth.unauthorized', {
+      reason: error?.message ?? 'セッションなし',
+    });
     throw new ApiError('UNAUTHORIZED');
   }
 
@@ -37,10 +43,14 @@ const resolveAuth = cache(async (): Promise<AuthContext> => {
     .single();
 
   if (!row) {
+    // 認証は通ったのに users 行が無い。
+    // トリガーの失敗か、手動削除の可能性がある。
+    log.error('auth.profile_missing', { userId: user.id, email: user.email });
     throw new ApiError('UNAUTHORIZED', 'プロフィールが見つかりません');
   }
 
   if (!row.is_active) {
+    log.warn('auth.inactive', { userId: row.id, email: row.email });
     throw new ApiError('FORBIDDEN', 'このアカウントは無効化されています');
   }
 
@@ -77,6 +87,12 @@ export async function requireAdmin(): Promise<AuthContext> {
   const ctx = await resolveAuth();
 
   if (ctx.profile.role !== 'admin') {
+    // 権限のない操作の試行。監査上、必ず残す。
+    log.warn('auth.forbidden', {
+      userId: ctx.profile.id,
+      email: ctx.profile.email,
+      role: ctx.profile.role,
+    });
     throw new ApiError('FORBIDDEN', '管理者権限が必要です');
   }
 

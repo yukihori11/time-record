@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { SESSION_SELECT, toWorkSession } from '@/app/lib/api/mappers';
 import {
   dateStr,
@@ -18,7 +19,7 @@ import {
  * 12時間以上経っても退勤していないセッションを
  * 「押し忘れの疑い」として一緒に返す。
  */
-export async function GET(request: Request) {
+export const GET = withLogging('admin.sessions.get', async (request: Request) => {
   try {
     const { supabase } = await requireAdmin();
     const url = new URL(request.url);
@@ -56,7 +57,7 @@ export async function GET(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
 /**
  * 打刻の遡り登録（押し忘れ対応）。
@@ -64,7 +65,7 @@ export async function GET(request: Request) {
  * 手動で作ったことが分かるよう is_manually_edited を立て、
  * 誰がなぜ作ったかを記録する。
  */
-export async function POST(request: Request) {
+export const POST = withLogging('admin.sessions.post', async (request: Request) => {
   try {
     const { supabase, profile } = await requireAdmin();
     const body = await readBody(request);
@@ -99,4 +100,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

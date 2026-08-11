@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/app/lib/supabase/server';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { readBody, str } from '@/app/lib/api/validate';
+import { log } from '@/app/lib/api/logger';
 
 // ログイン。
 // セッションは httpOnly Cookie に保存されるため、
 // ブラウザの JavaScript からトークンを読み取れない（XSS 耐性）。
 
-export async function POST(request: Request) {
+export const POST = withLogging('auth.login.post', async (request: Request) => {
   try {
     const body = await readBody(request);
     const email = str(body.email, 'メールアドレス', { max: 255 });
@@ -20,6 +22,8 @@ export async function POST(request: Request) {
     });
 
     if (error || !data.user) {
+      // 失敗の理由を残す。総当たりの検知にも使える。
+      log.warn('login.failed', { email, reason: error?.message });
       // メールアドレスの存在有無を区別しない（列挙攻撃対策）
       throw new ApiError(
         'UNAUTHORIZED',
@@ -43,6 +47,12 @@ export async function POST(request: Request) {
       throw new ApiError('FORBIDDEN', 'このアカウントは無効化されています');
     }
 
+    log.info('login.success', {
+      userId: profile.id,
+      email: profile.email,
+      role: profile.role,
+    });
+
     return NextResponse.json({
       user: {
         id: profile.id,
@@ -55,4 +65,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

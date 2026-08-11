@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/app/lib/supabase/server';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { readBody, str } from '@/app/lib/api/validate';
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -12,7 +13,7 @@ const MIN_PASSWORD_LENGTH = 8;
  * アクセストークンを渡してセッションを確立してから更新する。
  * 既にログイン済みの場合はトークン不要。
  */
-export async function POST(request: Request) {
+export const POST = withLogging('auth.reset-password.post', async (request: Request) => {
   try {
     const body = await readBody(request);
     const password = str(body.password, 'パスワード', { max: 200 });
@@ -85,4 +86,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

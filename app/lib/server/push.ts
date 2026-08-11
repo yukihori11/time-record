@@ -2,6 +2,7 @@ import 'server-only';
 
 import webpush from 'web-push';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { log } from '@/app/lib/api/logger';
 
 /**
  * プッシュ通知の送信。
@@ -57,11 +58,14 @@ export async function notifyUser(
       kind,
     });
   } catch (error) {
-    console.error('[push] お知らせの記録に失敗:', error);
+    log.error('push.recordFailed', { userId, error: String(error) });
   }
 
   if (!ensureConfigured()) {
-    console.warn('[push] VAPID キーが未設定のため送信をスキップしました');
+    log.warn('push.notConfigured', {
+      userId,
+      message: 'VAPID キーが未設定のため通知を送れません',
+    });
     return { sent: 0, failed: 0 };
   }
 
@@ -70,7 +74,11 @@ export async function notifyUser(
     .select('id, endpoint, p256dh, auth')
     .eq('user_id', userId);
 
-  if (!subs || subs.length === 0) return { sent: 0, failed: 0 };
+  if (!subs || subs.length === 0) {
+    // 端末を登録していない人。通知は届かないが記録は残っている。
+    log.info('push.noSubscription', { userId, title: payload.title });
+    return { sent: 0, failed: 0 };
+  }
 
   const message = JSON.stringify(payload);
   let sent = 0;
@@ -96,7 +104,11 @@ export async function notifyUser(
         if (status === 404 || status === 410) {
           expired.push(sub.id);
         } else {
-          console.error('[push] 送信に失敗:', status, sub.endpoint.slice(0, 40));
+          log.error('push.sendFailed', {
+            userId,
+            status,
+            error: String(error),
+          });
         }
       }
     })
@@ -104,6 +116,7 @@ export async function notifyUser(
 
   // 無効になった購読を掃除する
   if (expired.length > 0) {
+    log.info('push.expiredRemoved', { userId, count: expired.length });
     await supabase.from('push_subscriptions').delete().in('id', expired);
   }
 
@@ -113,6 +126,14 @@ export async function notifyUser(
       .update({ last_used_at: new Date().toISOString() })
       .eq('user_id', userId);
   }
+
+  log.info('push.sent', {
+    userId,
+    title: payload.title,
+    sent,
+    failed,
+    devices: subs.length,
+  });
 
   return { sent, failed };
 }
@@ -128,7 +149,7 @@ export async function notifyUsers(
     Array.from(new Set(userIds)).map((id) =>
       notifyUser(supabase, id, payload, kind).catch((error) => {
         // 1人分の失敗で全体を止めない
-        console.error('[push] 通知に失敗:', id, error);
+        log.error('push.userFailed', { userId: id, error: String(error) });
       })
     )
   );

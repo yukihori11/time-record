@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin, requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { toProperty } from '@/app/lib/api/mappers';
 import { int, optionalStr, readBody, str } from '@/app/lib/api/validate';
 
 // 棟の一覧。バイト生もカレンダー表示に必要なので閲覧可。
-export async function GET(request: Request) {
+export const GET = withLogging('properties.get', async (request: Request) => {
   try {
     const { supabase } = await requireUser();
     const url = new URL(request.url);
@@ -25,10 +26,10 @@ export async function GET(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
 // 棟の追加は管理者のみ
-export async function POST(request: Request) {
+export const POST = withLogging('properties.post', async (request: Request) => {
   try {
     const { supabase } = await requireAdmin();
     const body = await readBody(request);
@@ -54,4 +55,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

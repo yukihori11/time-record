@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin, requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { toShift } from '@/app/lib/api/mappers';
 import {
   dateStr,
@@ -19,7 +20,7 @@ import { monthRange } from '@/app/lib/domain/datetime';
  * 誰がどの棟に入るかはスタッフ同士でも見える方が運用しやすいので
  * 全員分を返す（RLS も SELECT は全許可）。
  */
-export async function GET(request: Request) {
+export const GET = withLogging('shifts.get', async (request: Request) => {
   try {
     const { supabase } = await requireUser();
     const url = new URL(request.url);
@@ -58,10 +59,10 @@ export async function GET(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
 // シフトの割当は管理者のみ。複数日をまとめて登録できる。
-export async function POST(request: Request) {
+export const POST = withLogging('shifts.post', async (request: Request) => {
   try {
     const { supabase, profile } = await requireAdmin();
     const body = await readBody(request);
@@ -100,4 +101,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

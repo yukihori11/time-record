@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/app/lib/supabase/server';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { enumValue, readBody, str } from '@/app/lib/api/validate';
 
 /**
@@ -13,7 +14,7 @@ import { enumValue, readBody, str } from '@/app/lib/api/validate';
  * 古い形式（URLのハッシュに access_token）は
  * reset-password 側で setSession を使うため、ここは通らない。
  */
-export async function POST(request: Request) {
+export const POST = withLogging('auth.verify-invite.post', async (request: Request) => {
   try {
     const body = await readBody(request);
 
@@ -47,4 +48,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

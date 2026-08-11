@@ -61,7 +61,14 @@ export const api = {
     request<T>(path, { method: 'PATCH', json: json ?? {} }),
   put: <T>(path: string, json?: unknown) =>
     request<T>(path, { method: 'PUT', json: json ?? {} }),
-  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  /**
+   * DELETE。
+   *
+   * body を受け取れるようにしているのは、削除対象を
+   * URL で表せない場合があるため（プッシュ購読の endpoint など）。
+   */
+  delete: <T>(path: string, json?: unknown) =>
+    request<T>(path, { method: 'DELETE', ...(json !== undefined ? { json } : {}) }),
 };
 
 /** API のエラーメッセージを取り出す */

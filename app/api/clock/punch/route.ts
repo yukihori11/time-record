@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { SESSION_SELECT, toWorkSession } from '@/app/lib/api/mappers';
 import { enumValue, optionalUuid, readBody } from '@/app/lib/api/validate';
+import { log } from '@/app/lib/api/logger';
 
 const ACTIONS = ['clock_in', 'clock_out', 'break_start', 'break_end'] as const;
 
@@ -17,11 +19,19 @@ const ACTIONS = ['clock_in', 'clock_out', 'break_start', 'break_end'] as const;
  * 二重打刻は DB の部分ユニークインデックスが弾く。
  * アプリ側のチェックが漏れても、連打や複数端末でも破綻しない。
  */
-export async function POST(request: Request) {
+export const POST = withLogging('clock.punch.post', async (request: Request) => {
   try {
     const { supabase, profile } = await requireUser();
     const body = await readBody(request);
     const action = enumValue(body.action, 'action', ACTIONS);
+
+    // 打刻は給与に直結するため、必ず記録に残す。
+    // 「押したのに反映されていない」の調査で最初に見る場所。
+    log.info('clock.punch', {
+      userId: profile.id,
+      name: profile.name,
+      action,
+    });
 
     if (action === 'clock_in') {
       const propertyId = optionalUuid(body.propertyId, 'propertyId');
@@ -44,6 +54,13 @@ export async function POST(request: Request) {
 
     if (fetchError) throw fetchError;
 
+    log.info('clock.punched', {
+      userId: profile.id,
+      action,
+      sessionId: data?.id ?? null,
+      status: data?.status ?? 'idle',
+    });
+
     return NextResponse.json({
       session: data ? toWorkSession(data) : null,
       serverNow: new Date().toISOString(),
@@ -51,4 +68,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

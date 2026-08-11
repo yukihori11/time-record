@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { NextResponse } from 'next/server';
+import { errorFields, log } from './logger';
 
 export type ErrorCode =
   | 'UNAUTHORIZED'
@@ -59,21 +60,38 @@ export class ApiError extends Error {
 
 export function errorResponse(error: unknown): NextResponse {
   if (error instanceof ApiError) {
+    // 想定内のエラー。500系だけ error 扱いにする。
+    const status = STATUS[error.code];
+    if (status >= 500) {
+      log.error('api.apiError', { code: error.code, message: error.message });
+    } else {
+      log.info('api.rejected', { code: error.code, message: error.message });
+    }
+
     return NextResponse.json(
       { error: { code: error.code, message: error.message } },
-      { status: STATUS[error.code] }
+      { status }
     );
   }
 
   const mapped = mapPostgresError(error);
   if (mapped) {
+    // DB が弾いた。制約違反や権限エラーの原因を追えるよう詳細も残す。
+    log.warn('api.dbRejected', {
+      code: mapped.code,
+      message: mapped.message,
+      ...errorFields(error),
+    });
+
     return NextResponse.json(
       { error: { code: mapped.code, message: mapped.message } },
       { status: STATUS[mapped.code] }
     );
   }
 
-  console.error('[api] 予期しないエラー:', error);
+  // ここに来るのは想定外。必ず調査対象。
+  log.error('api.unexpected', errorFields(error));
+
   return NextResponse.json(
     {
       error: {

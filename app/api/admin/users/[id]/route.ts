@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { enumValue, readBody, uuid } from '@/app/lib/api/validate';
 
 type Params = { params: Promise<{ id: string }> };
@@ -12,7 +13,7 @@ type Params = { params: Promise<{ id: string }> };
  * users テーブルへの直接 UPDATE は列権限で禁止されており、
  * 自己昇格ができない仕組みになっている。
  */
-export async function PATCH(request: Request, { params }: Params) {
+export const PATCH = withLogging('admin.users.id.patch', async (request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
@@ -56,4 +57,4 @@ export async function PATCH(request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

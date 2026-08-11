@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { SESSION_SELECT, toProperty, toWorkSession } from '@/app/lib/api/mappers';
 
 /**
@@ -13,7 +14,7 @@ import { SESSION_SELECT, toProperty, toWorkSession } from '@/app/lib/api/mappers
  * serverNow を返すのは、端末の時計がズレていても
  * 経過時間の表示が狂わないようにするため。
  */
-export async function GET() {
+export const GET = withLogging('clock.status.get', async () => {
   try {
     const { supabase, profile } = await requireUser();
 
@@ -41,4 +42,4 @@ export async function GET() {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

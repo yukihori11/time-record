@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import {
   SESSION_SELECT,
   toHourlyWage,
@@ -19,7 +20,7 @@ import { monthRange, todayJst } from '@/app/lib/domain/datetime';
  * 10人いれば30クエリになっていた。
  * 全員分の勤怠と時給をまとめて取り、集計はメモリ上で行う。
  */
-export async function GET() {
+export const GET = withLogging('admin.dashboard.get', async () => {
   try {
     const { supabase } = await requireAdmin();
 
@@ -100,4 +101,4 @@ export async function GET() {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

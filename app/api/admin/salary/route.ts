@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { monthStr } from '@/app/lib/api/validate';
 import {
   SESSION_SELECT,
@@ -18,7 +19,7 @@ import { monthRange, todayJst } from '@/app/lib/domain/datetime';
  * 全員分をまとめて取得し、集計はメモリ上で行う。
  * DBへの問い合わせは人数によらず4回。
  */
-export async function GET(request: Request) {
+export const GET = withLogging('admin.salary.get', async (request: Request) => {
   try {
     const { supabase } = await requireAdmin();
     const url = new URL(request.url);
@@ -108,4 +109,4 @@ export async function GET(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

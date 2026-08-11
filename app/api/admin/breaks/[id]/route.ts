@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { toBreakRecord } from '@/app/lib/api/mappers';
 import { isoDate, readBody, uuid } from '@/app/lib/api/validate';
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function PATCH(request: Request, { params }: Params) {
+export const PATCH = withLogging('admin.breaks.id.patch', async (request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
@@ -37,9 +38,9 @@ export async function PATCH(request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
-export async function DELETE(request: Request, { params }: Params) {
+export const DELETE = withLogging('admin.breaks.id.delete', async (request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
@@ -55,4 +56,4 @@ export async function DELETE(request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

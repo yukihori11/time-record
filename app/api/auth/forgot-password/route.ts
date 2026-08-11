@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/app/lib/supabase/server';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { readBody, str } from '@/app/lib/api/validate';
 
 // パスワードリセットのメールを送る。
@@ -9,7 +10,7 @@ import { readBody, str } from '@/app/lib/api/validate';
 // 「このメールは登録されていません」と返すと、
 // 攻撃者に有効なメールアドレスを教えることになるため。
 
-export async function POST(request: Request) {
+export const POST = withLogging('auth.forgot-password.post', async (request: Request) => {
   try {
     const body = await readBody(request);
     const email = str(body.email, 'メールアドレス', { max: 255 });
@@ -36,4 +37,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

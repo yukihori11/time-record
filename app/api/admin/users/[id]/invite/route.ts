@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { createAdminSupabase } from '@/app/lib/supabase/server';
 import { uuid } from '@/app/lib/api/validate';
 
 type Params = { params: Promise<{ id: string }> };
 
 /** 招待メールを再送する */
-export async function POST(_request: Request, { params }: Params) {
+export const POST = withLogging('admin.users.id.invite.post', async (_request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
@@ -61,7 +62,7 @@ export async function POST(_request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
 /**
  * 招待の取り消し。
@@ -69,7 +70,7 @@ export async function POST(_request: Request, { params }: Params) {
  * まだ利用を開始していない人だけ削除できる。
  * 勤務記録がある人を誤って消さないよう、DB側でも検査する。
  */
-export async function DELETE(_request: Request, { params }: Params) {
+export const DELETE = withLogging('admin.users.id.invite.delete', async (_request: Request, { params }: Params) => {
   try {
     const { supabase } = await requireAdmin();
     const { id } = await params;
@@ -96,4 +97,4 @@ export async function DELETE(_request: Request, { params }: Params) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

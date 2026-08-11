@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/app/lib/supabase/server';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 
-export async function POST() {
+export const POST = withLogging('auth.logout.post', async () => {
   try {
     const supabase = await createServerSupabase();
     await supabase.auth.signOut();
@@ -10,4 +11,4 @@ export async function POST() {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

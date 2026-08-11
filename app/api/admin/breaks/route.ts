@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/app/lib/api/auth';
 import { ApiError, errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { toBreakRecord } from '@/app/lib/api/mappers';
 import { isoDate, readBody, uuid } from '@/app/lib/api/validate';
 
 // 休憩の追加（管理者による修正）
-export async function POST(request: Request) {
+export const POST = withLogging('admin.breaks.post', async (request: Request) => {
   try {
     const { supabase } = await requireAdmin();
     const body = await readBody(request);
@@ -36,4 +37,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

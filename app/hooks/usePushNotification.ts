@@ -116,7 +116,11 @@ export function usePushNotification() {
       const subscription = await registration.pushManager.getSubscription();
 
       if (subscription) {
-        await api.delete(`/api/push/subscribe`).catch(() => {});
+        // どの端末の購読を消すかを endpoint で指定する。
+        // 指定しないとサーバー側で対象を特定できない。
+        await api
+          .delete('/api/push/subscribe', { endpoint: subscription.endpoint })
+          .catch(() => {});
         await subscription.unsubscribe();
       }
       setSubscribed(false);

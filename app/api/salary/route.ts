@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { computeMonthlySalary } from '@/app/lib/api/salary';
 import { monthStr } from '@/app/lib/api/validate';
 import { toSettings } from '@/app/lib/api/mappers';
@@ -8,7 +9,7 @@ import { todayJst } from '@/app/lib/domain/datetime';
 import { DEFAULT_SETTINGS } from '@/app/lib/domain/payroll';
 
 // 自分の月次給与
-export async function GET(request: Request) {
+export const GET = withLogging('salary.get', async (request: Request) => {
   try {
     const { supabase, profile } = await requireUser();
 
@@ -29,4 +30,4 @@ export async function GET(request: Request) {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

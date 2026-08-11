@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 import { readBody, str } from '@/app/lib/api/validate';
+import { log } from '@/app/lib/api/logger';
 
 /**
  * プッシュ通知の購読を登録する。
@@ -9,7 +11,7 @@ import { readBody, str } from '@/app/lib/api/validate';
  * 端末ごとに endpoint が異なるため、1人が複数登録できる。
  * 同じ端末から再登録された場合は上書きする。
  */
-export async function POST(request: Request) {
+export const POST = withLogging('push.subscribe.post', async (request: Request) => {
   try {
     const { supabase, profile } = await requireUser();
     const body = await readBody(request);
@@ -36,14 +38,20 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
+    log.info('push.subscribed', {
+      userId: profile.id,
+      name: profile.name,
+      userAgent: request.headers.get('user-agent')?.slice(0, 80),
+    });
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
 /** 購読を解除する */
-export async function DELETE(request: Request) {
+export const DELETE = withLogging('push.subscribe.delete', async (request: Request) => {
   try {
     const { supabase, profile } = await requireUser();
     const body = await readBody(request);
@@ -58,8 +66,10 @@ export async function DELETE(request: Request) {
 
     if (error) throw error;
 
+    log.info('push.unsubscribed', { userId: profile.id });
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

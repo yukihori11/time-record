@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/app/lib/api/auth';
 import { errorResponse } from '@/app/lib/api/errors';
+import { withLogging } from '@/app/lib/api/handler';
 
 /** 自分宛てのお知らせ一覧 */
-export async function GET() {
+export const GET = withLogging('notifications.get', async () => {
   try {
     const { supabase, profile } = await requireUser();
 
@@ -33,10 +34,10 @@ export async function GET() {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});
 
 /** まとめて既読にする */
-export async function PATCH() {
+export const PATCH = withLogging('notifications.patch', async () => {
   try {
     const { supabase, profile } = await requireUser();
 
@@ -52,4 +53,4 @@ export async function PATCH() {
   } catch (error) {
     return errorResponse(error);
   }
-}
+});

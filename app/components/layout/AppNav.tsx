@@ -40,7 +40,10 @@ export function SideNav() {
   const { user, signOut } = useAuth();
 
   return (
-    <aside className="hidden md:flex md:flex-col md:w-56 md:shrink-0 border-r border-slate-200 bg-white min-h-dvh sticky top-0">
+    <aside
+      className="hidden md:flex md:flex-col md:w-56 md:shrink-0 border-r border-slate-200 bg-white
+                 fixed inset-y-0 left-0 z-40 overflow-y-auto"
+    >
       <div className="px-5 py-5 border-b border-slate-100">
         <p className="font-bold text-slate-900 leading-tight">民泊</p>
         <p className="text-xs text-slate-500">勤怠管理</p>
@@ -133,9 +136,16 @@ export function BottomNav() {
  */
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="md:flex min-h-dvh bg-slate-50">
+    <div className="min-h-dvh bg-slate-50">
       <SideNav />
-      <div className="flex-1 min-w-0 pb-20 md:pb-0">{children}</div>
+
+      {/*
+        サイドバーは fixed なので場所を取らない。
+        その分の余白を md 以上で左に空ける（w-56 = 14rem）。
+        下部ナビの高さぶんはスマホでのみ確保する。
+      */}
+      <div className="min-w-0 pb-20 md:pb-0 md:pl-56">{children}</div>
+
       <BottomNav />
     </div>
   );

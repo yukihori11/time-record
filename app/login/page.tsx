@@ -1,7 +1,6 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { useAuth } from '@/app/contexts/AuthContext';
@@ -80,14 +79,15 @@ function LoginForm() {
           </Button>
         </form>
 
-        <div className="text-center mt-6">
-          <Link
-            href="/forgot-password"
-            className="text-sm text-blue-600 hover:text-blue-700 underline"
-          >
-            パスワードをお忘れですか？
-          </Link>
-        </div>
+        {/*
+          パスワードの再設定はメールを使わない。
+          管理者が設定画面から再発行して本人に伝える運用。
+        */}
+        <p className="text-center text-sm text-slate-500 mt-6 leading-relaxed">
+          パスワードが分からない場合は
+          <br />
+          管理者にお問い合わせください
+        </p>
       </div>
     </div>
   );

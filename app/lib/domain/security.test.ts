@@ -43,13 +43,7 @@ describe('API の権限チェック', () => {
     // 未認証で叩ける必要があるルート。
     // まだログインできない人（招待された直後・パスワードを忘れた人）が
     // 通るため、認証を要求してはいけない。
-    const publicRoutes = [
-      'auth/login',
-      'auth/logout',
-      'auth/forgot-password',
-      'auth/reset-password',
-      'auth/verify-link',
-    ];
+    const publicRoutes = ['auth/login', 'auth/logout'];
 
     const guarded = routeFiles.filter(
       (f) => !publicRoutes.some((p) => f.includes(p.replace('/', '/')))

@@ -70,9 +70,8 @@ export default function AccountView() {
 
     setSavingPass(true);
     try {
-      // ログイン済みなのでトークンは不要。
-      // 今のセッションのユーザーに対して変更が行われる。
-      await api.post('/api/auth/reset-password', { password });
+      // ログイン済みのユーザー自身のパスワードを変える
+      await api.post('/api/me/password', { password });
 
       setPassword('');
       setConfirm('');

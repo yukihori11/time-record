@@ -19,7 +19,7 @@ const MIN_PASSWORD_LENGTH = 8;
  *   サーバーで受け取れず、本人がパスワードを設定できなかった。
  *   管理者が直接伝える方が確実で、やり直しもすぐできる。
  *
- * パスワードを忘れた場合はメールで再設定できる（/forgot-password）。
+ * パスワードを忘れた場合は、管理者が設定画面から再発行する。
  */
 export const POST = withLogging('admin.users.post', async (request: Request) => {
   try {

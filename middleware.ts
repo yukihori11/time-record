@@ -6,17 +6,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // Supabase の Cookie は有効期限が短いため、ここでリフレッシュする。
 // これをやらないと、しばらく開いていたタブで打刻が失敗する。
 
-const PUBLIC_PATHS = [
-  '/login',
-  '/forgot-password',
-  // パスワード再設定。まだログインできない人が通るので認証を求めない
-  '/reset-password',
-  '/auth/callback',
-  '/api/auth/login',
-  '/api/auth/forgot-password',
-  '/api/auth/reset-password',
-  '/api/auth/verify-link',
-];
+const PUBLIC_PATHS = ['/login', '/api/auth/login'];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some(
@@ -79,36 +69,14 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // パスワード再設定のリンクを取りこぼさない。
-  //
-  // Supabase の Redirect URLs の設定によっては、指定した
-  // リンク先が無視されて Site URL（トップ）に飛ばされる。
-  // その状態でここが未認証としてログイン画面へ送ると、
-  // 認証用の code が失われてパスワードを設定できなくなる。
-  //
-  // code が付いていたら、認証を待たずに交換処理へ回す。
-  const code = request.nextUrl.searchParams.get('code');
-  if (code && pathname === '/') {
-    const next = request.nextUrl.searchParams.get('next') ?? '/reset-password';
-    const callback = new URL('/auth/callback', request.url);
-    callback.searchParams.set('code', code);
-    callback.searchParams.set('next', next);
-    return NextResponse.redirect(callback);
-  }
-
-  // トップは未認証でも通す。
-  //
-  // ハッシュ（#access_token=...）はサーバーに届かないため、
-  // ここでログイン画面へ送るとリンクの情報が失われる。
-  // 画面側で判定し、認証情報が無ければログインへ送る。
-  if (!user && !isPublic(pathname) && pathname !== '/') {
+  if (!user && !isPublic(pathname)) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
   // ログイン済みでログイン画面に来たらトップへ
-  if (user && (pathname === '/login' || pathname === '/forgot-password')) {
+  if (user && pathname === '/login') {
     return NextResponse.redirect(new URL('/', request.url));
   }
 

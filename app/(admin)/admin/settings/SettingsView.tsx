@@ -106,7 +106,7 @@ export default function SettingsView() {
    * パスワードを再発行する。
    *
    * 本人がメールを受け取れない場合の手段。
-   * メールが使えるなら /forgot-password から本人が再設定できる。
+   * ログインできる人は設定画面から自分で変えられる。
    */
   const resetPassword = async (userId: string, label: string) => {
     if (!window.confirm(`${label} のパスワードを再発行しますか？`)) return;

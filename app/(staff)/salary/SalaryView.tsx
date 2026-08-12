@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MonthlySalary, PayrollSettings } from '@/app/types/domain';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { formatDateJa } from '@/app/lib/domain/datetime';
@@ -45,9 +45,22 @@ export default function SalaryView({
     }
   }, []);
 
-  // 初期表示はサーバー取得済みなので、月を切り替えたときだけ取りに行く
+  // 月を切り替えたら取りに行く。
+  //
+  // 初期表示の月だけは、すでにサーバーで取得した分があるので
+  // 一度目は通信を省く。ただし戻ってきたときは取り直す。
+  //
+  // 以前はここで単に return していたため、他の月へ移ったあと
+  // 戻ると他の月の金額が残ったままになっていた。
+  // 管理者が勤務時間を直した場合にも、戻れば反映される。
+  const visited = useRef(false);
+
   useEffect(() => {
-    if (month === initialMonth) return;
+    if (month === initialMonth && !visited.current) {
+      visited.current = true;
+      return;
+    }
+    visited.current = true;
     void load(month);
   }, [month, initialMonth, load]);
 

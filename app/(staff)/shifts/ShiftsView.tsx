@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Property, Shift } from '@/app/types/domain';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { formatDateJa } from '@/app/lib/domain/datetime';
@@ -60,9 +60,20 @@ export default function ShiftsView({
     [user]
   );
 
-  // 初期表示はサーバー取得済み。月を切り替えたときだけ取りに行く
+  // 月を切り替えたら取りに行く。
+  //
+  // 初期表示の月だけは、すでにサーバーで取得した分があるので
+  // 一度目は通信を省く。ただし戻ってきたときは取り直す。
+  // initialShifts で復元すると、承諾済みのシフトが
+  // 未回答の状態に巻き戻ってしまうため。
+  const visited = useRef(false);
+
   useEffect(() => {
-    if (month === initialMonth) return;
+    if (month === initialMonth && !visited.current) {
+      visited.current = true;
+      return;
+    }
+    visited.current = true;
     void load(month);
   }, [month, initialMonth, load]);
 

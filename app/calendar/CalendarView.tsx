@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   DayActual,
   MonthlyActualTotal,
@@ -70,9 +70,23 @@ export default function CalendarView({
     }
   }, []);
 
-  // 初期表示はサーバー取得済み。月を切り替えたときだけ取りに行く
+  // 月を切り替えたら取りに行く。
+  //
+  // 初期表示の月だけは、すでにサーバーで取得した分があるので
+  // 一度目は通信を省く。ただし戻ってきたときは取り直す。
+  //
+  // 以前はここで単に return していたため、他の月へ移ったあと
+  // 戻ると data が移動先のままになり、予定が消えて見えた。
+  // かといって initialData で復元すると、承諾済みのシフトが
+  // 未回答へ巻き戻ってしまう。取り直すのが正しい。
+  const visited = useRef(false);
+
   useEffect(() => {
-    if (month === initialMonth) return;
+    if (month === initialMonth && !visited.current) {
+      visited.current = true;
+      return;
+    }
+    visited.current = true;
     void load(month);
   }, [month, initialMonth, load]);
 

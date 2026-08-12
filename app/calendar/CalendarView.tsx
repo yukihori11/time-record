@@ -227,6 +227,11 @@ export default function CalendarView({
 
       {formOpen && isAdmin && (
         <ScheduleForm
+          // key が無いと、追加フォームを開いたあと編集を開いても
+          // React が同じフォームを使い回す。初期値は useState で
+          // 一度しか評価されないため、メモや人数が前のまま残る。
+          // 対象が変わったら作り直させる。
+          key={editing?.id ?? 'new'}
           properties={data.properties}
           types={data.types}
           users={data.users}

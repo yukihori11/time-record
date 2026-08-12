@@ -212,6 +212,11 @@ export default function AttendanceView() {
 
       {(editing || creating) && (
         <SessionEditor
+          // key が無いと、別の記録を続けて開いたときに
+          // React が同じフォームを使い回す。初期値は useState で
+          // 一度しか評価されないため、前の記録の時刻が残る。
+          // 勤務時間は金額に直結するので取り違えは許容できない。
+          key={editing?.id ?? 'new'}
           session={editing}
           users={users}
           properties={properties}

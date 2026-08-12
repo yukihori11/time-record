@@ -1,7 +1,7 @@
 import 'server-only';
 
 import AppHeader from '@/app/components/layout/AppHeader';
-import { requireAdmin } from '@/app/lib/api/auth';
+import { guardAdminPage } from '@/app/lib/server/page-guard';
 import {
   SESSION_SELECT,
   toHourlyWage,
@@ -27,7 +27,7 @@ export const dynamic = 'force-dynamic';
  * スタッフごとにクエリを投げるとN+1になるため。
  */
 async function loadDashboard() {
-  const { supabase } = await requireAdmin();
+  const { supabase } = await guardAdminPage('/admin');
 
   const today = todayJst();
   const month = today.slice(0, 7);

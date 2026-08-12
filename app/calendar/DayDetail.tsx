@@ -9,7 +9,7 @@ import type {
   UserProfile,
 } from '@/app/types/domain';
 import type { DayDetailData } from '@/app/lib/domain/occupancy';
-import { formatDateJa } from '@/app/lib/domain/datetime';
+import { formatDateJa, isPast } from '@/app/lib/domain/datetime';
 import { formatDuration, formatYen } from '@/app/lib/domain/format';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import Button from '@/app/components/ui/Button';
@@ -227,7 +227,9 @@ function ShiftSection({
         <ul className="space-y-2 mt-2">
           {shifts.map((shift) => {
             const isMine = shift.userId === currentUserId;
-            const canRespond = isMine && shift.status === 'assigned';
+            // 回答済みでも変更できる。ただし過ぎた日は不可。
+            // サーバー側（0027）も同じ判定で拒否する。
+            const canRespond = isMine && !isPast(shift.shiftDate);
             const property = shift.propertyId
               ? propertyMap.get(shift.propertyId)
               : null;
@@ -330,29 +332,38 @@ function ShiftSection({
                   );
                 })()}
 
+                {/* 回答済みなら逆の選択肢だけを出す */}
                 {canRespond && decliningId !== shift.id && (
                   <div className="flex gap-2 mt-2.5">
-                    <Button
-                      size="sm"
-                      variant="success"
-                      loading={busyId === shift.id}
-                      onClick={() => respond(shift.id, 'accepted')}
-                    >
-                      承諾する
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => setDecliningId(shift.id)}
-                    >
-                      辞退する
-                    </Button>
+                    {shift.status !== 'accepted' && (
+                      <Button
+                        size="sm"
+                        variant="success"
+                        loading={busyId === shift.id}
+                        onClick={() => respond(shift.id, 'accepted')}
+                      >
+                        {shift.status === 'declined'
+                          ? 'やっぱり承諾する'
+                          : '承諾する'}
+                      </Button>
+                    )}
+                    {shift.status !== 'declined' && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setDecliningId(shift.id)}
+                      >
+                        {shift.status === 'accepted'
+                          ? '承諾を取り消す'
+                          : '辞退する'}
+                      </Button>
+                    )}
                   </div>
                 )}
 
                 {decliningId === shift.id && (
                   <div className="mt-2.5 space-y-2">
-                    <Field label="辞退の理由（任意）">
+                    <Field label="理由（任意）">
                       <Textarea
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}

@@ -135,6 +135,18 @@ export function mapPostgresError(
     }
   }
 
+  // DB 側が投げる VALIDATION は、そのまま見せてよい文言にしてある。
+  // 例:「すでに同じ内容で回答しています」「過ぎたシフトは変更できません」
+  // 拾わないと共通の「入力内容が正しくありません」になり、
+  // 何が起きたのか本人に伝わらない。
+  if (message.includes('VALIDATION:')) {
+    const detail = message.split('VALIDATION:').slice(1).join(':').trim();
+    return {
+      code: 'VALIDATION_ERROR',
+      message: detail || DEFAULT_MESSAGE.VALIDATION_ERROR,
+    };
+  }
+
   if (message.includes('BREAK_OVERLAP')) {
     return { code: 'CONFLICT', message: '休憩時間が重複しています' };
   }

@@ -38,6 +38,8 @@ interface ShiftResponseInput {
   propertyName?: string | null;
   startTime?: string | null;
   reason?: string | null;
+  /** 一度回答したものを変えたか。文面を分けるために使う */
+  isChange?: boolean;
 }
 
 /**
@@ -53,9 +55,16 @@ export async function notifyAdminsOfShiftResponse(
   try {
     const accepted = input.response === 'accepted';
 
-    const title = accepted
-      ? `${input.staffName}さんがシフトを承諾しました`
-      : `${input.staffName}さんがシフトを辞退しました`;
+    // 一度承諾したものを辞退へ変えた場合が最も重要。
+    // 代わりを探す必要があり、しかも決まったつもりでいたため
+    // 気づくのが遅れやすい。文面ではっきり区別する。
+    const title = input.isChange
+      ? accepted
+        ? `${input.staffName}さんが辞退を撤回しました`
+        : `${input.staffName}さんが承諾を取り消しました`
+      : accepted
+        ? `${input.staffName}さんがシフトを承諾しました`
+        : `${input.staffName}さんがシフトを辞退しました`;
 
     const lines = [
       formatDateJa(input.shiftDate) +
@@ -63,6 +72,7 @@ export async function notifyAdminsOfShiftResponse(
       input.propertyName ?? '',
       !accepted && input.reason ? `理由: ${input.reason}` : '',
       !accepted ? '代わりの担当を決めてください' : '',
+      input.isChange && accepted ? 'このシフトは対応可能になりました' : '',
     ].filter(Boolean);
 
     const body = lines.join('\n');
@@ -146,7 +156,9 @@ export async function notifyAdminsOfShiftResponse(
       title,
       body,
       link,
-      tag: `shift-${input.response}`,
+      // 変更は別の通知として出す。まとめられると
+      // 承諾が辞退に変わったことに気づけない。
+      tag: `shift-${input.response}${input.isChange ? '-changed' : ''}`,
     });
 
     let sent = 0;

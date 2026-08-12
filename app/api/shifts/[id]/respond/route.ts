@@ -26,6 +26,18 @@ export const POST = withLogging('shifts.id.respond.post', async (request: Reques
       'declined',
     ] as const);
 
+    // 変更前の状態を控える。
+    // 初回の回答か、一度出した答えを変えたのかで
+    // 管理者への通知の文面を変えるため。
+    //
+    // 0027 が未適用なら null が返る。その場合は
+    // 従来どおり初回として扱う。
+    const { data: before } = await supabase.rpc('my_shift_status', {
+      p_shift_id: uuid(id, 'id'),
+    });
+    const previous = typeof before === 'string' ? before : null;
+    const isChange = previous === 'accepted' || previous === 'declined';
+
     // 誰がいつ承諾・辞退したか。管理者への報告や
     // 「言った言わない」の確認に使う。
     log.info('shift.respond', {
@@ -33,6 +45,8 @@ export const POST = withLogging('shifts.id.respond.post', async (request: Reques
       name: profile.name,
       shiftId: uuid(id, 'id'),
       response,
+      previous,
+      isChange,
     });
 
     const { data, error } = await supabase.rpc('respond_to_shift', {
@@ -62,6 +76,7 @@ export const POST = withLogging('shifts.id.respond.post', async (request: Reques
       propertyName: property?.name ?? null,
       startTime: shift.startTime,
       reason: shift.declineReason ?? null,
+      isChange,
     });
 
     return NextResponse.json({ shift });

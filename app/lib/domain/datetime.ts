@@ -73,6 +73,16 @@ export function todayJst(now: Date = new Date()): string {
   return toJstDateString(now);
 }
 
+/**
+ * その日がもう過ぎているか（JST基準）。
+ *
+ * 当日は「過ぎていない」とする。朝に承諾を取り消したい
+ * ことはあるため。サーバー側（0027）も同じ判定にしてある。
+ */
+export function isPast(dateStr: string, now: Date = new Date()): boolean {
+  return dateStr < todayJst(now);
+}
+
 /** 'YYYY-MM-DD' → 'M月D日(曜)' */
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 

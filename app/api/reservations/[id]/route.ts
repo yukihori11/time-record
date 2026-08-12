@@ -4,6 +4,7 @@ import { ApiError, errorResponse } from '@/app/lib/api/errors';
 import { withLogging } from '@/app/lib/api/handler';
 import { toSchedule, toShift } from '@/app/lib/api/mappers';
 import { notifyShiftAssignment } from '@/app/lib/server/shift-notify';
+import { notifyStaffOfShiftRemoval } from '@/app/lib/server/shift-change-notify';
 import {
   dateStr,
   int,
@@ -79,13 +80,24 @@ export const PATCH = withLogging('reservations.id.patch', async (request: Reques
     const scheduleDate = dateStr(body.scheduleDate, '日付');
     const shifts = parseShifts(body.shifts, scheduleDate);
 
-    // 変更前の担当者を控え、新しく追加された人だけに通知する
+    // 変更前の担当を控える。
+    // 追加された人には割当を、外された人には解除を伝える。
     const { data: before } = await supabase
       .from('shifts')
-      .select('user_id')
+      .select('user_id, shift_date, start_time, end_time, property_id, status, note')
       .eq('reservation_id', scheduleId);
 
-    const existing = new Set((before ?? []).map((s) => s.user_id));
+    const beforeRows = (before ?? []) as {
+      user_id: string;
+      shift_date: string;
+      start_time: string | null;
+      end_time: string | null;
+      property_id: string | null;
+      status: string;
+      note: string | null;
+    }[];
+
+    const existing = new Set(beforeRows.map((s) => s.user_id));
 
     const { data, error } = await supabase.rpc('update_schedule_with_shifts', {
       p_reservation_id: scheduleId,
@@ -101,6 +113,25 @@ export const PATCH = withLogging('reservations.id.patch', async (request: Reques
     });
 
     if (error) throw error;
+
+    // 担当から外れた人。承諾済みだった場合は特に重要で、
+    // 伝わらないと当日その場に現れることになる。
+    const kept = new Set(
+      shifts.map((s) => s.userId).filter((v): v is string => Boolean(v))
+    );
+    const removed = beforeRows.filter((s) => !kept.has(s.user_id));
+
+    for (const r of removed) {
+      await notifyStaffOfShiftRemoval(supabase, {
+        userId: r.user_id,
+        shiftDate: r.shift_date,
+        startTime: r.start_time,
+        endTime: r.end_time,
+        propertyId: r.property_id,
+        status: r.status,
+        note: r.note,
+      });
+    }
 
     const added = shifts.filter((s) => s.userId && !existing.has(s.userId));
 

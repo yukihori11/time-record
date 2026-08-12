@@ -19,13 +19,12 @@ type Phase = 'checking' | 'ready' | 'invalid' | 'done';
 /**
  * パスワードの再設定。
  *
- * Supabase のメールリンクは、トークンを URL のハッシュ
- * （#access_token=...&refresh_token=...）で渡してくる。
- * ハッシュはサーバーに送られないため、ここで読み取って
- * API に渡し、サーバー側でセッションを確立する。
+ * メールのリンクは /auth/callback がセッションを確立してから
+ * この画面へ送ってくる。そのためトークンの処理は不要で、
+ * ログイン済みとして扱える。
  *
- * ログイン済みの人が自分でパスワードを変える場合は
- * トークン無しでも使える。
+ * 旧方式（#access_token=... がハッシュに付く）でも動くよう、
+ * ハッシュがあればそちらも受ける。
  */
 function ResetPasswordForm() {
   const router = useRouter();

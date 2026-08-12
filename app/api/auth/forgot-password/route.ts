@@ -20,10 +20,9 @@ export const POST = withLogging('auth.forgot-password.post', async (request: Req
 
     const supabase = await createServerSupabase();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      // Supabase はトークンを URL のハッシュ（#access_token=...）で渡す。
-      // ハッシュはサーバーに届かないため、画面側で読む必要がある。
-      // /reset-password が読み取って処理する。
-      redirectTo: `${siteUrl}/reset-password`,
+      // @supabase/ssr は PKCE を使うため ?code=... で戻ってくる。
+      // サーバーで交換する必要があるので /auth/callback で受ける。
+      redirectTo: `${siteUrl}/auth/callback?next=/reset-password`,
     });
 
     if (error) {

@@ -9,13 +9,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 const PUBLIC_PATHS = [
   '/login',
   '/forgot-password',
-  // 招待・パスワード再設定。まだログインできない人が通るので認証を求めない
+  // パスワード再設定。まだログインできない人が通るので認証を求めない
   '/reset-password',
-  '/auth/confirm',
+  '/auth/callback',
   '/api/auth/login',
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
-  '/api/auth/verify-invite',
 ];
 
 function isPublic(pathname: string): boolean {

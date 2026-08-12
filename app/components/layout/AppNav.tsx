@@ -58,12 +58,18 @@ export function SideNav() {
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                    active
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-slate-600 hover:bg-slate-50'
-                  }`}
+                  aria-current={active ? 'page' : undefined}
+                  className={`relative flex items-center gap-3 px-3 py-2.5
+                    rounded-xl text-sm font-semibold transition-colors ${
+                      active
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
                 >
+                  {/* 選択中は左端にバーを出す */}
+                  {active && (
+                    <span className="absolute left-0 inset-y-1.5 w-1 rounded-r bg-blue-600" />
+                  )}
                   <span className="text-lg leading-none w-5 text-center" aria-hidden>
                     {item.icon}
                   </span>
@@ -112,12 +118,18 @@ export function BottomNav() {
             <li key={item.href} className="flex-1 min-w-0">
               <Link
                 href={item.href}
-                className={`flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors ${
-                  active
-                    ? 'text-blue-600'
-                    : 'text-slate-400 hover:text-slate-600'
-                }`}
+                aria-current={active ? 'page' : undefined}
+                className={`relative flex flex-col items-center gap-0.5 py-2.5
+                  text-[11px] font-semibold transition-colors ${
+                    active
+                      ? 'text-blue-600 bg-blue-50'
+                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                  }`}
               >
+                {/* 選択中は上端にバーを出す。色だけより気づきやすい */}
+                {active && (
+                  <span className="absolute inset-x-0 top-0 h-0.5 bg-blue-600" />
+                )}
                 <span className="text-lg leading-none" aria-hidden>
                   {item.icon}
                 </span>

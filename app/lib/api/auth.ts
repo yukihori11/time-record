@@ -22,12 +22,16 @@ export interface AuthContext {
 const resolveAuth = cache(async (): Promise<AuthContext> => {
   const supabase = await createServerSupabase();
 
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  // getUser() は毎回 Supabase の認証サーバーへ通信する。
+  // getClaims() は JWT をローカルで検証するため通信が要らない。
+  //
+  // 署名の検証で本人性は担保される。加えて users テーブルを
+  // 引いて role と有効/無効を確認するので、
+  // 権限の判定が古いトークンに引きずられることもない。
+  const { data: claims, error } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
 
-  if (error || !user) {
+  if (error || !userId) {
     // 未ログインは日常的に起きるので warn 止まり。
     // ただし理由は残す（トークン切れか、そもそも無いのか）
     log.warn('auth.unauthorized', {
@@ -39,13 +43,16 @@ const resolveAuth = cache(async (): Promise<AuthContext> => {
   const { data: row } = await supabase
     .from('users')
     .select('id, email, name, role, is_active')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single();
 
   if (!row) {
     // 認証は通ったのに users 行が無い。
     // トリガーの失敗か、手動削除の可能性がある。
-    log.error('auth.profile_missing', { userId: user.id, email: user.email });
+    log.error('auth.profile_missing', {
+      userId,
+      email: claims?.claims?.email,
+    });
     throw new ApiError('UNAUTHORIZED', 'プロフィールが見つかりません');
   }
 

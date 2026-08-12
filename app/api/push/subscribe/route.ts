@@ -32,6 +32,9 @@ export const POST = withLogging('push.subscribe.post', async (request: Request) 
         auth,
         user_agent: request.headers.get('user-agent')?.slice(0, 300) ?? null,
         failed_count: 0,
+        // 送信が拒否された印を消す。
+        // 登録し直したということは、その端末はまた使える。
+        failed_at: null,
       },
       { onConflict: 'endpoint' }
     );

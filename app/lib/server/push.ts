@@ -69,10 +69,14 @@ export async function notifyUser(
     return { sent: 0, failed: 0 };
   }
 
+  // failed_at が入っている端末は Google/Apple 側で無効になった印。
+  // 送っても 410 が返るだけなので対象から外す。
+  // 本人が開き直せば登録し直され、印は消える。
   const { data: subs } = await supabase
     .from('push_subscriptions')
     .select('id, endpoint, p256dh, auth')
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .is('failed_at', null);
 
   if (!subs || subs.length === 0) {
     // 端末を登録していない人。通知は届かないが記録は残っている。
@@ -114,10 +118,23 @@ export async function notifyUser(
     })
   );
 
-  // 無効になった購読を掃除する
+  // 無効になった購読に印を付ける。
+  //
+  // 以前はここで消していたが、それだと端末側が気づけない。
+  // 端末は購読を持ったままなので「受け取る」と表示し続け、
+  // 二度と復旧しなかった（Android で実際に起きた）。
+  //
+  // 残しておけば、本人が次に開いたときサーバーが
+  // 「無効」と答えられ、その場で登録し直せる。
   if (expired.length > 0) {
-    log.info('push.expiredRemoved', { userId, count: expired.length });
-    await supabase.from('push_subscriptions').delete().in('id', expired);
+    log.info('push.expiredMarked', { userId, count: expired.length });
+    const { error } = await supabase.rpc('mark_push_failed', {
+      p_ids: expired,
+    });
+    // 0026 が未適用でも通知そのものは動かす
+    if (error && error.code !== 'PGRST202') {
+      log.error('push.markFailed', { userId, reason: error.message });
+    }
   }
 
   if (sent > 0) {

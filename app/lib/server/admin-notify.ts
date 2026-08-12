@@ -174,11 +174,12 @@ export async function notifyAdminsOfShiftResponse(
       })
     );
 
-    // 無効になった購読を消す。
-    // こちらも RLS を越えるため関数を経由する。
+    // 無効になった購読に印を付ける。
+    // 消してしまうと端末側が気づけず復旧できないため、
+    // 残したうえで送信対象から外す（push.ts と同じ方針）。
     if (expired.length > 0) {
       await supabase
-        .rpc('delete_push_subscriptions', { p_ids: expired })
+        .rpc('mark_push_failed', { p_ids: expired })
         .then(undefined, () => {});
     }
 

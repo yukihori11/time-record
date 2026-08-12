@@ -26,12 +26,21 @@ export const GET = withLogging('push.status.get', async (request: Request) => {
 
     const { data } = await supabase
       .from('push_subscriptions')
-      .select('id')
+      .select('id, failed_at')
       .eq('user_id', profile.id)
       .eq('endpoint', endpoint)
       .maybeSingle();
 
-    return NextResponse.json({ registered: Boolean(data) });
+    // 送信が拒否された端末は、行が残っていても使えない。
+    // 未登録として答え、その場で登録し直させる。
+    //
+    // failed_at は 0026 で追加した列。未適用の環境では
+    // undefined になるので、その場合は従来どおり扱う。
+    const failed = Boolean(
+      (data as { failed_at?: string | null } | null)?.failed_at
+    );
+
+    return NextResponse.json({ registered: Boolean(data) && !failed });
   } catch (error) {
     return errorResponse(error);
   }

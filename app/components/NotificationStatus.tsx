@@ -1,5 +1,6 @@
 'use client';
 
+import { useAuth } from '@/app/contexts/AuthContext';
 import { usePushNotification } from '@/app/hooks/usePushNotification';
 import { useInstallPrompt } from '@/app/hooks/useInstallPrompt';
 import Button from '@/app/components/ui/Button';
@@ -24,6 +25,13 @@ export default function NotificationStatus() {
   } = usePushNotification();
 
   const { canInstall, installed, install } = useInstallPrompt();
+  const { isAdmin } = useAuth();
+
+  // 受け取る内容は役割で違う。
+  // 管理者はスタッフの回答、バイト生は自分への割当。
+  const purpose = isAdmin
+    ? 'スタッフがシフトを承諾・辞退したときにお知らせします'
+    : 'シフトが割り当てられたときにお知らせします';
 
   const state = (() => {
     if (permission === 'unsupported') {
@@ -61,13 +69,13 @@ export default function NotificationStatus() {
       return {
         label: '受け取る',
         color: 'bg-emerald-100 text-emerald-700',
-        message: 'シフトが割り当てられたときに通知が届きます',
+        message: purpose,
       };
     }
     return {
       label: '受け取らない',
       color: 'bg-slate-200 text-slate-600',
-      message: '有効にすると、シフトの割当をすぐ知ることができます',
+      message: `有効にすると、${purpose.replace('お知らせします', 'すぐ気づけます')}`,
     };
   })();
 

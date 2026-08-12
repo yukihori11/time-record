@@ -14,6 +14,7 @@ import { roundMinutes } from '@/app/lib/domain/rounding';
 import { useAuth } from '@/app/contexts/AuthContext';
 import Button from '@/app/components/ui/Button';
 import { Field, Input, Select } from '@/app/components/ui/Field';
+import NotificationStatus from '@/app/components/NotificationStatus';
 import {
   Card,
   ErrorBanner,
@@ -167,6 +168,9 @@ export default function SettingsView() {
     <div className="space-y-4">
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
+
+      {/* 通知。承諾・辞退を受け取るために管理者も有効にする必要がある */}
+      <NotificationStatus />
 
       {/* 自分のパスワード。管理者もここから変えられる */}
       <MyPasswordSection />

@@ -107,19 +107,38 @@ export async function notifyAdminsOfShiftResponse(
       return;
     }
 
-    // 送信先の管理者を取得する
-    const { data: admins } = await supabase.rpc('admin_user_ids');
-    const adminIds = ((admins ?? []) as { id: string }[]).map((a) => a.id);
+    // 管理者の送信先を取得する。
+    //
+    // push_subscriptions の RLS は「自分の購読のみ」なので、
+    // スタッフの権限では管理者の行を読めない。
+    // 専用の関数を経由する。
+    const { data: targets, error: targetError } = await supabase.rpc(
+      'admin_push_targets'
+    );
 
-    if (adminIds.length === 0) return;
+    if (targetError) {
+      if (targetError.code === 'PGRST202') {
+        log.warn('adminNotify.migrationMissing', {
+          message:
+            'マイグレーション 0024 が未適用のため管理者へ送信できません',
+        });
+        return;
+      }
+      log.error('adminNotify.targetsFailed', { reason: targetError.message });
+      return;
+    }
 
-    const { data: subs } = await supabase
-      .from('push_subscriptions')
-      .select('id, endpoint, p256dh, auth, user_id')
-      .in('user_id', adminIds);
+    const subs = (targets ?? []) as {
+      id: string;
+      endpoint: string;
+      p256dh: string;
+      auth: string;
+    }[];
 
-    if (!subs || subs.length === 0) {
-      log.info('adminNotify.noSubscription', { admins: adminIds.length });
+    if (subs.length === 0) {
+      log.info('adminNotify.noSubscription', {
+        message: '管理者が通知を有効にしていません',
+      });
       return;
     }
 
@@ -155,8 +174,12 @@ export async function notifyAdminsOfShiftResponse(
       })
     );
 
+    // 無効になった購読を消す。
+    // こちらも RLS を越えるため関数を経由する。
     if (expired.length > 0) {
-      await supabase.from('push_subscriptions').delete().in('id', expired);
+      await supabase
+        .rpc('delete_push_subscriptions', { p_ids: expired })
+        .then(undefined, () => {});
     }
 
     log.info('adminNotify.sent', {

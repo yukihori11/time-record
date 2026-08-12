@@ -60,6 +60,7 @@ function ResetPasswordForm() {
         return;
       }
 
+      // 形式1: ハッシュにトークンが付く（implicit）
       const accessToken = hashParams.get('access_token');
       const refreshToken = hashParams.get('refresh_token');
 
@@ -68,6 +69,28 @@ function ResetPasswordForm() {
         // トークンを URL に残さない
         window.history.replaceState(null, '', window.location.pathname);
         setPhase('ready');
+        return;
+      }
+
+      // 形式2: クエリに token_hash が付く。
+      // サーバーで検証してセッションを張る。
+      const tokenHash =
+        searchParams.get('token_hash') ?? hashParams.get('token_hash');
+      const linkType =
+        searchParams.get('type') ?? hashParams.get('type') ?? 'recovery';
+
+      if (tokenHash) {
+        try {
+          await api.post('/api/auth/verify-link', {
+            tokenHash,
+            type: linkType,
+          });
+          window.history.replaceState(null, '', window.location.pathname);
+          setPhase('ready');
+        } catch (err) {
+          setInvalidReason(errorMessage(err));
+          setPhase('invalid');
+        }
         return;
       }
 

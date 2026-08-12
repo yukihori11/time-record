@@ -45,6 +45,16 @@ export default function Home() {
       return;
     }
 
+    // token_hash 形式。クエリごと再設定画面へ引き継ぐ
+    const tokenHash = search.get('token_hash') ?? hash.get('token_hash');
+    if (tokenHash) {
+      const t = search.get('type') ?? hash.get('type') ?? 'recovery';
+      router.replace(
+        `/reset-password?token_hash=${encodeURIComponent(tokenHash)}&type=${t}`
+      );
+      return;
+    }
+
     if (accessToken) {
       // ハッシュはそのまま引き継ぐ必要がある。
       // router では失われるため location で遷移する。

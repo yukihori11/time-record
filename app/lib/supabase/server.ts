@@ -55,6 +55,30 @@ export async function createServerSupabase() {
 }
 
 /**
+ * メール送信専用のクライアント。
+ *
+ * 既定の PKCE 方式は、リンクを開いた端末に code_verifier が
+ * 無いと交換できない。メールのリンクは別の端末や
+ * メールアプリ内のブラウザで開かれるため、PKCE では失敗する。
+ *
+ * implicit にすると、リンクにトークンが直接付く形式になり、
+ * どの端末で開いても処理できる。
+ */
+export function createMailSupabase() {
+  return createClient(
+    requireEnv('SUPABASE_URL'),
+    requireEnv('SUPABASE_ANON_KEY'),
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        flowType: 'implicit',
+      },
+    }
+  );
+}
+
+/**
  * RLS を迂回する管理用クライアント。
  *
  * 使用は初期セットアップとパスワードリセットに限定する。

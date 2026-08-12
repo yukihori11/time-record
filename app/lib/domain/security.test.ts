@@ -48,7 +48,7 @@ describe('API の権限チェック', () => {
       'auth/logout',
       'auth/forgot-password',
       'auth/reset-password',
-      'auth/verify-invite',
+      'auth/verify-link',
     ];
 
     const guarded = routeFiles.filter(

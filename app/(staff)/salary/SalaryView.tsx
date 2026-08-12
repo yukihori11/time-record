@@ -67,8 +67,13 @@ export default function SalaryView({
         />
       ) : (
         <>
-          {/* 月合計 */}
-          <Card className="p-6 bg-blue-600 border-blue-600">
+          {/*
+            月合計。
+            Card は bg-white を持つため、className で背景色を渡しても
+            打ち消せず、白地に白文字で金額が消える。
+            配色が特殊なので Card を使わず直接組み立てる。
+          */}
+          <div className="p-6 rounded-2xl shadow-sm bg-blue-600">
             <p className="text-sm text-blue-100">今月の給与</p>
             <p className="text-4xl font-bold text-white mt-1 tabular-nums">
               {formatYen(salary.totalAmount)}
@@ -93,7 +98,7 @@ export default function SalaryView({
                 </p>
               </div>
             </div>
-          </Card>
+          </div>
 
           {salary.missingWageDates.length > 0 && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-sm">

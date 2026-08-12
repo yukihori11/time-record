@@ -59,7 +59,12 @@ export default function AdminSalaryView() {
         <EmptyState icon="📊" title="この月の勤務記録はありません" />
       ) : (
         <>
-          <Card className="p-5 bg-slate-900 border-slate-900">
+          {/*
+            Card は bg-white を持つため、className で bg-slate-900 を
+            渡しても打ち消せず、白地に白文字で金額が消えていた。
+            ここは配色が特殊なので Card を使わず直接組み立てる。
+          */}
+          <div className="p-5 rounded-2xl shadow-sm bg-slate-900">
             <p className="text-sm text-slate-300">人件費の合計</p>
             <p className="text-3xl font-bold text-white mt-1 tabular-nums">
               {formatYen(grandTotal)}
@@ -68,7 +73,7 @@ export default function AdminSalaryView() {
               {rows.length}名 / 延べ
               {rows.reduce((sum, r) => sum + r.salary.days.length, 0)}日
             </p>
-          </Card>
+          </div>
 
           <a
             href={`/api/admin/salary?month=${month}&format=csv`}

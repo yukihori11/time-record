@@ -78,7 +78,29 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user && !isPublic(pathname)) {
+  // パスワード再設定のリンクを取りこぼさない。
+  //
+  // Supabase の Redirect URLs の設定によっては、指定した
+  // リンク先が無視されて Site URL（トップ）に飛ばされる。
+  // その状態でここが未認証としてログイン画面へ送ると、
+  // 認証用の code が失われてパスワードを設定できなくなる。
+  //
+  // code が付いていたら、認証を待たずに交換処理へ回す。
+  const code = request.nextUrl.searchParams.get('code');
+  if (code && pathname === '/') {
+    const next = request.nextUrl.searchParams.get('next') ?? '/reset-password';
+    const callback = new URL('/auth/callback', request.url);
+    callback.searchParams.set('code', code);
+    callback.searchParams.set('next', next);
+    return NextResponse.redirect(callback);
+  }
+
+  // トップは未認証でも通す。
+  //
+  // ハッシュ（#access_token=...）はサーバーに届かないため、
+  // ここでログイン画面へ送るとリンクの情報が失われる。
+  // 画面側で判定し、認証情報が無ければログインへ送る。
+  if (!user && !isPublic(pathname) && pathname !== '/') {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);

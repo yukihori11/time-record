@@ -168,6 +168,9 @@ export default function SettingsView() {
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
 
+      {/* 自分のパスワード。管理者もここから変えられる */}
+      <MyPasswordSection />
+
       {/* 給与ルール */}
       <Card className="p-4">
         <h2 className="font-bold text-slate-900 mb-3">給与の計算ルール</h2>
@@ -878,6 +881,95 @@ function InviteSection({ onInvited }: { onInvited: () => void }) {
           disabled={!email || password.length < 8}
         >
           このスタッフを追加する
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+/**
+ * 自分のパスワードを変更する。
+ *
+ * 管理者も自分のパスワードを変えたい。
+ * スタッフ一覧の「鍵」は他人への再発行なので、
+ * 自分の分は別に用意する必要がある。
+ */
+function MyPasswordSection() {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setDone(null);
+
+    if (password.length < 8) {
+      setError('パスワードは8文字以上で設定してください');
+      return;
+    }
+    if (password !== confirm) {
+      setError('パスワードが一致しません');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await api.post('/api/me/password', { password });
+      setPassword('');
+      setConfirm('');
+      setDone('パスワードを変更しました');
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="p-4">
+      <h2 className="font-bold text-slate-900 mb-1">自分のパスワード</h2>
+      <p className="text-xs text-slate-500 mb-3">
+        好きなパスワードを設定できます（8文字以上）
+      </p>
+
+      <ErrorBanner message={error} />
+      <SuccessBanner message={done} />
+
+      <form onSubmit={submit} className="space-y-3 mt-2">
+        <Field label="新しいパスワード" required>
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            minLength={8}
+            autoComplete="new-password"
+            placeholder="••••••••"
+            required
+          />
+        </Field>
+
+        <Field label="確認のためもう一度" required>
+          <Input
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            minLength={8}
+            autoComplete="new-password"
+            placeholder="••••••••"
+            required
+          />
+        </Field>
+
+        <Button
+          type="submit"
+          fullWidth
+          loading={saving}
+          disabled={!password || !confirm}
+        >
+          パスワードを変更する
         </Button>
       </form>
     </Card>

@@ -65,9 +65,14 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getUser() は毎回 Supabase の認証サーバーへ通信する。
+  // ページ遷移のたびに往復が入り、体感の遅さに直結する。
+  //
+  // getClaims() は JWT をローカルで検証するため通信が要らない。
+  // ここでの用途は「ログインしているか」の判定だけなので、
+  // 署名の検証で十分。実際のデータ保護は API と RLS が担う。
+  const { data: claims } = await supabase.auth.getClaims();
+  const user = claims?.claims ? { id: claims.claims.sub } : null;
 
   if (!user && !isPublic(pathname)) {
     const loginUrl = new URL('/login', request.url);

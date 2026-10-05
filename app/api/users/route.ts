@@ -6,10 +6,8 @@ import { withLogging } from '@/app/lib/api/handler';
 /**
  * スタッフ一覧。
  *
- * カレンダーでシフト担当者の名前を出すために必要。
- * ただし RLS により staff は自分の行しか読めないため、
- * 一般ユーザーには「シフトに登場する人の表示名」だけを返す。
- * メールアドレスは管理者にのみ開示する。
+ * 管理者には全員分（メールアドレス・招待状況つき）を返す。
+ * スタッフには自分だけを返す。
  */
 export const GET = withLogging('users.get', async () => {
   try {
@@ -55,17 +53,18 @@ export const GET = withLogging('users.get', async () => {
       });
     }
 
-    // スタッフには氏名だけを返す（メールは伏せる）
-    const { data } = await supabase.rpc('list_staff_names');
-
+    // スタッフには自分だけを返す。他のスタッフの名前も見せない方針
+    // （呼び出し元は管理画面だけで、スタッフの画面からは使っていない）
     return NextResponse.json({
-      users: (data ?? []).map((u: { id: string; name: string }) => ({
-        id: u.id,
-        email: '',
-        name: u.name ?? '',
-        role: 'staff' as const,
-        isActive: true,
-      })),
+      users: [
+        {
+          id: profile.id,
+          email: '',
+          name: profile.name,
+          role: 'staff' as const,
+          isActive: true,
+        },
+      ],
     });
   } catch (error) {
     return errorResponse(error);

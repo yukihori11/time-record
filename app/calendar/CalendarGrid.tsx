@@ -323,13 +323,17 @@ function StayBarView({
   const target = bar.startsHere ? stay.checkIn : null;
   const selectable = target !== null && target.startsWith(month);
 
+  // ブロック＝Airbnb で売り止めにしている期間（予約ではない）。
+  // 灰色だけだと何の帯か分からないため文字を入れる
   if (isBlocked) {
     return (
       <div
-        className="absolute top-0 bottom-0 rounded bg-slate-200/80"
+        className="absolute top-0 bottom-0 flex items-center px-1 overflow-hidden rounded bg-slate-200 border border-dashed border-slate-400 text-[9px] font-bold text-slate-500 leading-none"
         style={{ left, width }}
-        title={`${property.name} ブロック ${stay.checkIn}〜${stay.checkOut}`}
-      />
+        title={`${property.name} ブロック（Airbnb で売り止め） ${stay.checkIn}〜${stay.checkOut}`}
+      >
+        <span className="truncate">ブロック</span>
+      </div>
     );
   }
 

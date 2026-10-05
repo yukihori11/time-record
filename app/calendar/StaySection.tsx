@@ -41,8 +41,10 @@ export default function StaySection({
   onCreateCleaning: (propertyId: string, date: string) => void;
   onChanged: () => void;
 }) {
-  const { checkIns, staying, checkOuts } = staysOnDate(stays, date);
-  if (checkIns.length + staying.length + checkOuts.length === 0) return null;
+  const { checkIns, staying, checkOuts, blocks } = staysOnDate(stays, date);
+  if (checkIns.length + staying.length + checkOuts.length + blocks.length === 0) {
+    return null;
+  }
 
   const propertyMap = new Map(properties.map((p) => [p.id, p]));
 
@@ -81,6 +83,23 @@ export default function StaySection({
             isAdmin={isAdmin}
             onChanged={onChanged}
           />
+        ))}
+        {blocks.map((s) => (
+          <li
+            key={s.id}
+            className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-sm"
+          >
+            <p className="font-bold text-slate-600">
+              ブロック
+              <span className="font-normal ml-2">
+                {propertyMap.get(s.propertyId)?.name ?? '棟不明'}
+              </span>
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Airbnb で売り止めにしている期間です（予約ではありません）。
+              {formatDateJa(s.checkIn)} 〜 {formatDateJa(s.checkOut)}
+            </p>
+          </li>
         ))}
       </ul>
     </section>

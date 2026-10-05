@@ -263,3 +263,12 @@ describe('airbnbReservationUrl', () => {
     expect(airbnbReservationUrl('javascript:alert(1)')).toBeNull();
   });
 });
+
+describe('staysOnDate のブロック', () => {
+  const stays = [stay({ id: 'blk', kind: 'blocked', checkIn: '2026-10-07', checkOut: '2026-10-10' })];
+  it('売り止めの期間中の日に出る。終わりの日は売り止めに含まれない', () => {
+    expect(staysOnDate(stays, '2026-10-07').blocks.map((s) => s.id)).toEqual(['blk']);
+    expect(staysOnDate(stays, '2026-10-09').blocks.map((s) => s.id)).toEqual(['blk']);
+    expect(staysOnDate(stays, '2026-10-10').blocks).toEqual([]);
+  });
+});

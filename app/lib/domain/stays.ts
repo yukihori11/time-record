@@ -111,6 +111,10 @@ export function staysOnDate(stays: Stay[], date: string) {
     checkIns: reserved.filter((s) => s.checkIn === date),
     staying: reserved.filter((s) => s.checkIn < date && date < s.checkOut),
     checkOuts: reserved.filter((s) => s.checkOut === date),
+    // ブロックは終わりの日（DTEND）は売り止めに含まれない
+    blocks: stays.filter(
+      (s) => s.kind === 'blocked' && s.checkIn <= date && date < s.checkOut
+    ),
   };
 }
 

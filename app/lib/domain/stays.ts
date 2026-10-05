@@ -253,3 +253,17 @@ export function checkInsOn(
         (order.get(a.stay.propertyId) ?? 99) - (order.get(b.stay.propertyId) ?? 99)
     );
 }
+
+// ------------------------------------------------------------
+// Airbnb の予約ページ
+// ------------------------------------------------------------
+
+/**
+ * 予約コードから Airbnb のホスト向け予約ページの URL を作る。
+ * iCal には人数が無いので、ここから Airbnb を開いて確かめてもらう。
+ * ホストのアカウントでしか開けないため、管理者にだけ出す。
+ */
+export function airbnbReservationUrl(code: string | null): string | null {
+  if (!code || !/^[A-Z0-9]{6,20}$/i.test(code)) return null;
+  return `https://www.airbnb.com/hosting/reservations/details/${code.toUpperCase()}`;
+}

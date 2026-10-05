@@ -8,6 +8,7 @@ import type {
 } from '@/app/types/domain';
 import { formatDateJa, todayJst } from '@/app/lib/domain/datetime';
 import type { CheckInItem, CleaningStatus } from '@/app/lib/domain/stays';
+import { airbnbReservationUrl } from '@/app/lib/domain/stays';
 import { formatYen } from '@/app/lib/domain/format';
 import { Card } from '@/app/components/ui/Feedback';
 import NotificationList from '@/app/components/NotificationList';
@@ -266,11 +267,24 @@ function CheckInDay({
                     )}
                   </p>
                 </div>
-                <span
-                  className={`shrink-0 text-xs font-bold px-2 py-1 rounded-lg border ${badge.className}`}
-                >
-                  {badge.label}
-                </span>
+                <div className="shrink-0 flex flex-col items-end gap-1">
+                  <span
+                    className={`text-xs font-bold px-2 py-1 rounded-lg border ${badge.className}`}
+                  >
+                    {badge.label}
+                  </span>
+                  {/* 人数は iCal に無いので、Airbnb の予約ページで確かめてもらう */}
+                  {airbnbReservationUrl(stay.reservationCode) && (
+                    <a
+                      href={airbnbReservationUrl(stay.reservationCode) ?? undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-rose-600"
+                    >
+                      Airbnb で開く ↗
+                    </a>
+                  )}
+                </div>
               </li>
             );
           })}

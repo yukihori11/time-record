@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { Property, Stay } from '@/app/types/domain';
 import type { CleaningStatus } from '@/app/lib/domain/stays';
-import { staysOnDate } from '@/app/lib/domain/stays';
+import { airbnbReservationUrl, staysOnDate } from '@/app/lib/domain/stays';
 import { formatDateJa } from '@/app/lib/domain/datetime';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import Button from '@/app/components/ui/Button';
@@ -132,7 +132,10 @@ function StayItem({
         </p>
 
         {isAdmin && stay.reservationCode && (
-          <p className="text-xs text-slate-400">予約コード {stay.reservationCode}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-slate-400">予約コード {stay.reservationCode}</p>
+            <AirbnbLink code={stay.reservationCode} />
+          </div>
         )}
 
         {stay.note && (
@@ -240,5 +243,21 @@ function GuestForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/** Airbnb の予約ページを開く。人数を確かめて入力するために使う */
+export function AirbnbLink({ code }: { code: string | null }) {
+  const url = airbnbReservationUrl(code);
+  if (!url) return null;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="shrink-0 inline-flex items-center gap-1 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg hover:bg-rose-100"
+    >
+      Airbnb で予約を開く ↗
+    </a>
   );
 }

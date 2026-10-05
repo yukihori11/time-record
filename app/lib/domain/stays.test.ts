@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ReservationType, Schedule, Shift, Stay } from '@/app/types/domain';
 import {
+  airbnbReservationUrl,
   calendarWeeks,
   checkInsByDate,
   checkInsOn,
@@ -245,5 +246,20 @@ describe('checkInsOn', () => {
 
   it('清掃の状態を付ける', () => {
     expect(items.map((i) => i.cleaning)).toEqual(['unassigned', 'missing']);
+  });
+});
+
+describe('airbnbReservationUrl', () => {
+  it('予約コードから予約ページの URL を作る', () => {
+    expect(airbnbReservationUrl('HMABCD1234')).toBe(
+      'https://www.airbnb.com/hosting/reservations/details/HMABCD1234'
+    );
+  });
+
+  it('コードが無い・形がおかしいときは作らない', () => {
+    expect(airbnbReservationUrl(null)).toBeNull();
+    expect(airbnbReservationUrl('')).toBeNull();
+    expect(airbnbReservationUrl('HM/../x')).toBeNull();
+    expect(airbnbReservationUrl('javascript:alert(1)')).toBeNull();
   });
 });

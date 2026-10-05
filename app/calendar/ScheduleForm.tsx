@@ -33,6 +33,8 @@ export default function ScheduleForm({
   users,
   schedule,
   defaultDate,
+  defaultPropertyId,
+  defaultTypeId,
   onClose,
   onSaved,
 }: {
@@ -41,13 +43,18 @@ export default function ScheduleForm({
   users: UserProfile[];
   schedule: Schedule | null;
   defaultDate: string;
+  /** 新規作成で棟・種別を最初から選んでおく（清掃未手配からの作成など） */
+  defaultPropertyId?: string;
+  defaultTypeId?: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [propertyId, setPropertyId] = useState(
-    schedule?.propertyId ?? properties[0]?.id ?? ''
+    schedule?.propertyId ?? defaultPropertyId ?? properties[0]?.id ?? ''
   );
-  const [typeId, setTypeId] = useState(schedule?.typeId ?? types[0]?.id ?? '');
+  const [typeId, setTypeId] = useState(
+    schedule?.typeId ?? defaultTypeId ?? types[0]?.id ?? ''
+  );
   const [guestCount, setGuestCount] = useState(
     String(schedule?.guestCount ?? 2)
   );

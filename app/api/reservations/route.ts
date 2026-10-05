@@ -22,10 +22,12 @@ import { log } from '@/app/lib/api/logger';
  *
  * 予定は1日で完結するため、期間の重なりを考える必要がない。
  * 指定した範囲の日付を素直に引くだけで済む。
+ *
+ * スタッフには、自分のシフトが紐づく予定だけを返す。
  */
 export const GET = withLogging('reservations.get', async (request: Request) => {
   try {
-    const { supabase } = await requireUser();
+    const { supabase, profile } = await requireUser();
     const url = new URL(request.url);
 
     const monthParam = url.searchParams.get('month');
@@ -41,7 +43,7 @@ export const GET = withLogging('reservations.get', async (request: Request) => {
       to = dateStr(url.searchParams.get('to'), 'to');
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('reservations')
       .select('*')
       .eq('status', 'confirmed')
@@ -49,6 +51,22 @@ export const GET = withLogging('reservations.get', async (request: Request) => {
       .lte('schedule_date', to)
       .order('schedule_date');
 
+    if (profile.role !== 'admin') {
+      const { data: mine, error: mineError } = await supabase
+        .from('shifts')
+        .select('reservation_id')
+        .eq('user_id', profile.id)
+        .gte('shift_date', from)
+        .lte('shift_date', to)
+        .not('reservation_id', 'is', null);
+      if (mineError) throw mineError;
+
+      const ids = [...new Set((mine ?? []).map((r) => r.reservation_id as string))];
+      if (ids.length === 0) return NextResponse.json({ schedules: [] });
+      query = query.in('id', ids);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
 
     return NextResponse.json({

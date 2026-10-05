@@ -81,8 +81,9 @@ export function createMailSupabase() {
 /**
  * RLS を迂回する管理用クライアント。
  *
- * 使用は初期セットアップとパスワードリセットに限定する。
+ * 使用はスタッフの作成・パスワードリセット・Airbnb の取り込みに限定する。
  * 通常の CRUD では絶対に使わない（RLS が全て無効になるため）。
+ * Airbnb の取り込みは毎朝の自動実行でログインした人がいないため使う。
  */
 export function createAdminSupabase() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

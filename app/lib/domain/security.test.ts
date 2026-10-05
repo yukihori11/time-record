@@ -24,7 +24,26 @@ function findFiles(dir: string, filename: string): string[] {
 
 const routeFiles = findFiles(join(APP_DIR, 'api'), 'route.ts');
 
+// 自動実行から呼ばれるルート。ログインした人がいないので、
+// requireUser の代わりに CRON_SECRET で守る。
+const CRON_ROUTES = [join('api', 'cron')];
+
 describe('API の権限チェック', () => {
+  it('自動実行のルートは必ず CRON_SECRET を確かめる', () => {
+    const cronRoutes = routeFiles.filter((f) =>
+      CRON_ROUTES.some((p) => f.includes(p))
+    );
+
+    expect(cronRoutes.length).toBeGreaterThan(0);
+
+    const missing = cronRoutes.filter((f) => {
+      const src = readFileSync(f, 'utf8');
+      return !src.includes('process.env.CRON_SECRET') || !src.includes('authorization');
+    });
+
+    expect(missing).toEqual([]);
+  });
+
   it('管理者向けルートは必ず requireAdmin を呼ぶ', () => {
     const adminRoutes = routeFiles.filter((f) =>
       f.includes(`${join('api', 'admin')}`)
@@ -46,7 +65,9 @@ describe('API の権限チェック', () => {
     const publicRoutes = ['auth/login', 'auth/logout'];
 
     const guarded = routeFiles.filter(
-      (f) => !publicRoutes.some((p) => f.includes(p.replace('/', '/')))
+      (f) =>
+        !publicRoutes.some((p) => f.includes(p.replace('/', '/'))) &&
+        !CRON_ROUTES.some((p) => f.includes(p))
     );
 
     const missing = guarded.filter((f) => {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  IcalFeedStatus,
   PayrollSettings,
   Property,
   ReservationType,
@@ -309,6 +310,9 @@ export default function SettingsView() {
       {/* 棟の管理 */}
       <PropertySection properties={properties} onChanged={load} />
 
+      {/* Airbnb のカレンダーの取り込み */}
+      <IcalFeedSection properties={properties} />
+
       {/* 予定の種別 */}
       <TypeSection types={types} onChanged={load} />
 
@@ -533,6 +537,132 @@ function PropertySection({
 }
 
 /**
+ * Airbnb のカレンダー（iCal）の取り込み。
+ *
+ * 棟ごとに Airbnb の「カレンダーをエクスポート」の URL を貼る。
+ * URL を知っていれば誰でも予約日程を読めるため、管理者にだけ見せる。
+ */
+function IcalFeedSection({ properties }: { properties: Property[] }) {
+  const [feeds, setFeeds] = useState<IcalFeedStatus[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const loadFeeds = useCallback(async () => {
+    try {
+      const res = await api.get<{ feeds: IcalFeedStatus[] }>('/api/admin/ical-feeds');
+      setFeeds(res.feeds);
+      setDrafts(Object.fromEntries(res.feeds.map((f) => [f.propertyId, f.icalUrl])));
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadFeeds();
+  }, [loadFeeds]);
+
+  const save = async (propertyId: string) => {
+    setSavingId(propertyId);
+    setError(null);
+    setSuccess(null);
+    try {
+      await api.put('/api/admin/ical-feeds', {
+        propertyId,
+        icalUrl: drafts[propertyId] ?? '',
+      });
+      // 保存したらすぐ取り込んで、URL が正しいかをその場で分かるようにする
+      const res = await api.post<{ results?: { propertyId: string; ok: boolean; error?: string }[] }>(
+        '/api/ical/sync',
+        { force: true }
+      );
+      const mine = res.results?.find((r) => r.propertyId === propertyId);
+      if (mine && !mine.ok) setError(mine.error ?? '取り込みに失敗しました');
+      else setSuccess(drafts[propertyId] ? '保存して取り込みました' : '連携をやめました');
+      await loadFeeds();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const feedMap = new Map(feeds.map((f) => [f.propertyId, f]));
+
+  return (
+    <Card className="p-4">
+      <h2 className="font-bold text-slate-900 mb-1">Airbnb 連携</h2>
+      <p className="text-xs text-slate-500 mb-3">
+        Airbnb の「カレンダー」→「カレンダーの同期」→「カレンダーをエクスポート」の URL を棟ごとに貼ります。
+        取り込めるのは日付だけで、名前・人数はカレンダーから手で入力します。
+      </p>
+      <ErrorBanner message={error} />
+      <SuccessBanner message={success} />
+
+      <ul className="space-y-3">
+        {properties
+          .filter((p) => p.isActive)
+          .map((p) => {
+            const feed = feedMap.get(p.id);
+            const draft = drafts[p.id] ?? '';
+            const changed = draft !== (feed?.icalUrl ?? '');
+
+            return (
+              <li key={p.id} className="p-2.5 rounded-xl bg-slate-50 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+                  <span className="text-sm font-semibold text-slate-800 flex-1">{p.name}</span>
+                  {feed && (
+                    <span
+                      className={`text-xs font-semibold ${
+                        feed.lastError ? 'text-red-600' : 'text-slate-400'
+                      }`}
+                    >
+                      {feed.lastError
+                        ? '取り込みエラー'
+                        : feed.lastSyncedAt
+                          ? `最終同期 ${new Date(feed.lastSyncedAt).toLocaleString('ja-JP', {
+                              timeZone: 'Asia/Tokyo',
+                              month: 'numeric',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}`
+                          : '未同期'}
+                    </span>
+                  )}
+                </div>
+                {feed?.lastError && (
+                  <p className="text-xs text-red-600">{feed.lastError}</p>
+                )}
+                <div className="flex gap-2">
+                  <div className="flex-1 min-w-0">
+                    <Input
+                      value={draft}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [p.id]: e.target.value }))}
+                      placeholder="https://www.airbnb.jp/calendar/ical/..."
+                      inputMode="url"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => save(p.id)}
+                    loading={savingId === p.id}
+                    disabled={!changed}
+                  >
+                    保存
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+      </ul>
+    </Card>
+  );
+}
+
+/**
  * 予定の種別（宿泊・清掃など）。
  * 運用に合わせて増やせるようにしている。
  */
@@ -631,6 +761,18 @@ function TypeSection({
             >
               {t.hasGuests ? '客あり' : '作業'}
             </span>
+            {/* チェックイン当日にこの種別の予定があれば「清掃手配済み」とみなす */}
+            <button
+              onClick={() => update(t.id, { isCleaning: !t.isCleaning })}
+              className={`text-xs px-2 py-1.5 rounded-lg font-semibold shrink-0 ${
+                t.isCleaning
+                  ? 'bg-teal-100 text-teal-700'
+                  : 'bg-slate-100 text-slate-400'
+              }`}
+              title="チェックイン当日の清掃の判定に使う"
+            >
+              {t.isCleaning ? '清掃' : '清掃外'}
+            </button>
             <button
               onClick={() => update(t.id, { isActive: !t.isActive })}
               className={`text-xs px-2 py-1.5 rounded-lg font-semibold shrink-0 ${

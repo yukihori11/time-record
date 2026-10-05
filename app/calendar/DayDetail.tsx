@@ -6,9 +6,12 @@ import type {
   Property,
   Schedule,
   Shift,
+  Stay,
   UserProfile,
 } from '@/app/types/domain';
 import type { DayDetailData } from '@/app/lib/domain/occupancy';
+import type { CleaningStatus } from '@/app/lib/domain/stays';
+import StaySection from './StaySection';
 import { formatDateJa, isPast } from '@/app/lib/domain/datetime';
 import { formatDuration, formatYen } from '@/app/lib/domain/format';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
@@ -25,6 +28,9 @@ export default function DayDetail({
   actuals,
   onChanged,
   onEditSchedule,
+  stays,
+  cleaning,
+  onCreateCleaning,
 }: {
   detail: DayDetailData;
   properties: Property[];
@@ -35,6 +41,10 @@ export default function DayDetail({
   actuals: DayActual[];
   onChanged: () => void;
   onEditSchedule?: (schedule: Schedule) => void;
+  /** Airbnb の宿泊（表示中の月の分） */
+  stays: Stay[];
+  cleaning: Map<string, CleaningStatus>;
+  onCreateCleaning: (propertyId: string, date: string) => void;
 }) {
   const userMap = new Map(users.map((u) => [u.id, u]));
 
@@ -50,6 +60,17 @@ export default function DayDetail({
           </span>
         )}
       </div>
+
+      {/* チェックインと当日の清掃。漏れを防ぐため予定より上に置く */}
+      <StaySection
+        date={detail.date}
+        stays={stays}
+        properties={properties}
+        cleaning={cleaning}
+        isAdmin={isAdmin}
+        onCreateCleaning={onCreateCleaning}
+        onChanged={onChanged}
+      />
 
       {/* その日の予定 */}
       <section>

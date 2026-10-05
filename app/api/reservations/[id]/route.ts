@@ -17,12 +17,18 @@ import {
 
 type Params = { params: Promise<{ id: string }> };
 
-/** 予定の詳細（担当スタッフも含む） */
+/**
+ * 予定の詳細（担当スタッフも含む）。
+ *
+ * スタッフは自分がシフトに入っている予定だけ見られる。
+ * 担当者も自分の分だけを返す（他のスタッフの担当は見せない方針）。
+ */
 export const GET = withLogging('reservations.id.get', async (_request: Request, { params }: Params) => {
   try {
-    const { supabase } = await requireUser();
+    const { supabase, profile } = await requireUser();
     const { id } = await params;
     const scheduleId = uuid(id, 'id');
+    const isAdmin = profile.role === 'admin';
 
     const [scheduleRes, shiftsRes] = await Promise.all([
       supabase
@@ -39,9 +45,16 @@ export const GET = withLogging('reservations.id.get', async (_request: Request, 
 
     if (!scheduleRes.data) throw new ApiError('NOT_FOUND');
 
+    const shifts = (shiftsRes.data ?? [])
+      .map(toShift)
+      .filter((s) => isAdmin || s.userId === profile.id);
+
+    // 自分が入っていない予定は、あること自体を知らせない
+    if (!isAdmin && shifts.length === 0) throw new ApiError('NOT_FOUND');
+
     return NextResponse.json({
       schedule: toSchedule(scheduleRes.data),
-      shifts: (shiftsRes.data ?? []).map(toShift),
+      shifts,
     });
   } catch (error) {
     return errorResponse(error);

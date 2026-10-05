@@ -8,6 +8,7 @@ import type {
   ReservationType,
   Schedule,
   Shift,
+  Stay,
   UserProfile,
   WorkSession,
 } from '@/app/types/domain';
@@ -20,6 +21,7 @@ import {
   toReservationType,
   toSettings,
   toShift,
+  toStay,
   toWorkSession,
 } from '@/app/lib/api/mappers';
 import {
@@ -29,6 +31,8 @@ import {
 } from '@/app/lib/domain/payroll';
 import { resolveWage } from '@/app/lib/domain/wage-history';
 import { monthRange, todayJst } from '@/app/lib/domain/datetime';
+import { scopeToStaff } from '@/app/lib/domain/stays';
+import { log } from '@/app/lib/api/logger';
 
 /**
  * Server Component から直接呼ぶデータ取得層。
@@ -132,6 +136,7 @@ export const getCalendarData = cache(async (month: string) => {
     sessionsRes,
     wagesRes,
     settingsRes,
+    staysRes,
   ] = await Promise.all([
       supabase
         .from('reservations')
@@ -169,7 +174,36 @@ export const getCalendarData = cache(async (month: string) => {
       // 金額の計算に使う。スタッフは自分の時給しか見えない。
       supabase.from('hourly_wages').select('*').order('effective_from'),
       supabase.from('app_settings').select('*').eq('id', 1).single(),
+
+      // Airbnb の宿泊。月に少しでも掛かるもの（前月から続く・翌月へ続く分も含む）
+      supabase
+        .from('airbnb_stays')
+        .select('id, property_id, kind, check_in, check_out, reservation_code, guest_count, note')
+        .eq('status', 'active')
+        .lte('check_in', to)
+        .gte('check_out', from)
+        .order('check_in'),
     ]);
+
+  // migration 未適用の環境では表が無い。カレンダーごと落とさず宿泊なしで出す
+  if (staysRes.error) {
+    log.warn('calendar.stays_unavailable', { code: staysRes.error.code, message: staysRes.error.message });
+  }
+  const stayRows = staysRes.error ? [] : (staysRes.data ?? []);
+
+  const allShifts = (shiftsRes.data ?? []).map(toShift) as Shift[];
+  const allSchedules = (reservationsRes.data ?? []).map(toSchedule) as Schedule[];
+  const allStays: Stay[] = stayRows.map(toStay);
+
+  // スタッフには、自分にお願いされた分だけを返す。
+  //   シフト  自分のもの
+  //   予定    自分のシフトが紐づくもの
+  //   宿泊    自分のシフトがある日・棟にチェックインするもの（清掃は当日のため）
+  // 予定・シフトの RLS は全員に読めるので、ここで絞らないと
+  // 他のスタッフの担当や名前が届いてしまう。
+  const { shifts, schedules, stays } = isAdmin
+    ? { shifts: allShifts, schedules: allSchedules, stays: allStays }
+    : scopeToStaff(profile.id, allShifts, allSchedules, allStays);
 
   const settings = settingsRes.data
     ? toSettings(settingsRes.data)
@@ -234,11 +268,15 @@ export const getCalendarData = cache(async (month: string) => {
     );
 
   return {
-    schedules: (reservationsRes.data ?? []).map(toSchedule) as Schedule[],
+    schedules,
     properties: (propertiesRes.data ?? []).map(toProperty) as Property[],
-    shifts: (shiftsRes.data ?? []).map(toShift) as Shift[],
+    shifts,
     types: (typesRes.data ?? []).map(toReservationType) as ReservationType[],
-    users: ((usersRes.data ?? []) as { id: string; name: string }[]).map(
+    stays,
+    // スタッフには自分の名前だけ。他のスタッフの名前は使わないので渡さない
+    users: ((usersRes.data ?? []) as { id: string; name: string }[])
+      .filter((u) => isAdmin || u.id === profile.id)
+      .map(
       (u): UserProfile => ({
         id: u.id,
         email: '',

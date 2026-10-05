@@ -84,6 +84,8 @@ export interface ReservationType {
   icon: string;
   /** 客が滞在するか。false なら人数の入力を求めない */
   hasGuests: boolean;
+  /** 清掃の種別か。チェックイン当日に清掃が手配済みかの判定に使う */
+  isCleaning: boolean;
   isActive: boolean;
   displayOrder: number;
 }
@@ -196,4 +198,30 @@ export interface MonthlySalary {
   totalBreakMs: number;
   totalBilledMinutes: number;
   missingWageDates: string[]; // 時給未設定の日
+}
+
+/**
+ * Airbnb から取り込んだ宿泊（またはブロック）。
+ *
+ * 予定（Schedule）と違い期間を持つ。日付は iCal から自動で入り、
+ * 人数は管理者が後から手で入れる。
+ */
+export interface Stay {
+  id: string;
+  propertyId: string;
+  kind: 'reserved' | 'blocked';
+  checkIn: string; // YYYY-MM-DD
+  checkOut: string; // YYYY-MM-DD
+  reservationCode: string | null;
+  /** 未記入なら null */
+  guestCount: number | null;
+  note: string | null;
+}
+
+/** 棟ごとの Airbnb 連携の状態（管理者向け） */
+export interface IcalFeedStatus {
+  propertyId: string;
+  icalUrl: string;
+  lastSyncedAt: string | null;
+  lastError: string | null;
 }

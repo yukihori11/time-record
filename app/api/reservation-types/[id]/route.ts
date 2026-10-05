@@ -20,6 +20,7 @@ export const PATCH = withLogging('reservation-types.id.patch', async (request: R
       patch.icon = optionalStr(body.icon, 'アイコン', 8) ?? '';
     }
     if (body.hasGuests !== undefined) patch.has_guests = Boolean(body.hasGuests);
+    if (body.isCleaning !== undefined) patch.is_cleaning = Boolean(body.isCleaning);
     if (body.isActive !== undefined) patch.is_active = Boolean(body.isActive);
     if (body.displayOrder !== undefined) {
       patch.display_order = int(body.displayOrder, '表示順', { min: 0, max: 999 });

@@ -8,16 +8,19 @@ import type {
   ReservationType,
   Schedule,
   Shift,
+  Stay,
   UserProfile,
 } from '@/app/types/domain';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { todayJst } from '@/app/lib/domain/datetime';
 import { formatDuration, formatYen } from '@/app/lib/domain/format';
 import { buildDayDetail, schedulesByDate } from '@/app/lib/domain/occupancy';
+import type { CleaningStatus } from '@/app/lib/domain/stays';
+import { cleaningStatus } from '@/app/lib/domain/stays';
 import MonthNav from '@/app/components/MonthNav';
 import { ErrorBanner, Spinner } from '@/app/components/ui/Feedback';
 import Button from '@/app/components/ui/Button';
-import CalendarGrid from './CalendarGrid';
+import CalendarGrid, { CLEANING_MARK } from './CalendarGrid';
 import DayDetail from './DayDetail';
 import ScheduleForm from './ScheduleForm';
 
@@ -26,6 +29,8 @@ interface CalendarData {
   properties: Property[];
   shifts: Shift[];
   types: ReservationType[];
+  /** Airbnb から取り込んだ宿泊 */
+  stays: Stay[];
   users: UserProfile[];
   /** 日付ごとの実績（打刻の結果） */
   actuals: Record<string, DayActual[]>;
@@ -54,6 +59,14 @@ export default function CalendarView({
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Schedule | null>(null);
+  // 清掃未手配から開いたとき、棟・種別・日付を入れておく
+  const [prefill, setPrefill] = useState<{
+    propertyId: string;
+    typeId?: string;
+    date: string;
+  } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const load = useCallback(async (targetMonth: string) => {
     setLoading(true);
@@ -81,6 +94,48 @@ export default function CalendarView({
   // 未回答へ巻き戻ってしまう。取り直すのが正しい。
   const visited = useRef(false);
 
+  const monthRef = useRef(month);
+  monthRef.current = month;
+
+  // 開いたときに Airbnb と同期する。前回から時間が経っていなければ
+  // サーバー側で省かれる。取り込みがあったときだけ取り直す。
+  // 失敗してもカレンダーは使えるので、画面にはエラーを出さない。
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await api.post<{ synced: number }>('/api/ical/sync', {});
+        if (res.synced > 0) void load(monthRef.current);
+      } catch {
+        // 管理者は「Airbnb と同期」ボタンで結果を確かめられる
+      }
+    })();
+  }, [load]);
+
+  /** 管理者が今すぐ同期する */
+  const syncNow = async () => {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const res = await api.post<{
+        synced: number;
+        results?: { ok: boolean; error?: string }[];
+      }>('/api/ical/sync', { force: true });
+      const failed = (res.results ?? []).filter((r) => !r.ok);
+      if ((res.results ?? []).length === 0) {
+        setSyncMessage('Airbnb の URL が登録されていません（設定 → Airbnb 連携）');
+      } else if (failed.length > 0) {
+        setSyncMessage(`同期に失敗した棟があります：${failed[0].error ?? ''}`);
+      } else {
+        setSyncMessage('Airbnb と同期しました');
+      }
+      void load(month);
+    } catch (err) {
+      setSyncMessage(errorMessage(err));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   useEffect(() => {
     if (month === initialMonth && !visited.current) {
       visited.current = true;
@@ -95,6 +150,32 @@ export default function CalendarView({
     () => schedulesByDate(data.schedules, data.properties, data.types),
     [data.schedules, data.properties, data.types]
   );
+
+  // 宿泊ごとのチェックイン当日の清掃の状態
+  const cleaning = useMemo(() => {
+    const map = new Map<string, CleaningStatus>();
+    for (const st of data.stays ?? []) {
+      if (st.kind !== 'reserved') continue;
+      map.set(st.id, cleaningStatus(st, data.schedules, data.types, data.shifts));
+    }
+    return map;
+  }, [data.stays, data.schedules, data.types, data.shifts]);
+
+  // 今日以降で清掃が未手配のチェックイン
+  const missingCleaningCount = (data.stays ?? []).filter(
+    (st) =>
+      st.checkIn >= todayJst() &&
+      st.checkIn.startsWith(month) &&
+      cleaning.get(st.id) === 'missing'
+  ).length;
+
+  const cleaningTypeId = data.types.find((t) => t.isCleaning)?.id;
+
+  const openCleaningForm = (propertyId: string, date: string) => {
+    setEditing(null);
+    setPrefill({ propertyId, typeId: cleaningTypeId, date });
+    setFormOpen(true);
+  };
 
   const detail = useMemo(
     () =>
@@ -129,6 +210,23 @@ export default function CalendarView({
 
       <ErrorBanner message={error} />
 
+      {isAdmin && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button size="sm" variant="secondary" loading={syncing} onClick={syncNow}>
+            Airbnb と同期
+          </Button>
+          {syncMessage && (
+            <span className="text-xs text-slate-500">{syncMessage}</span>
+          )}
+        </div>
+      )}
+
+      {isAdmin && missingCleaningCount > 0 && (
+        <div className="px-3 py-2 rounded-lg bg-red-50 text-red-600 border border-red-200 text-xs font-bold">
+          {CLEANING_MARK.missing.icon} 清掃が未手配のチェックインが {missingCleaningCount}件あります
+        </div>
+      )}
+
       {isAdmin && (pendingCount > 0 || declinedCount > 0) && (
         <div className="flex gap-2 text-xs font-semibold">
           {pendingCount > 0 && (
@@ -162,6 +260,27 @@ export default function CalendarView({
         </div>
       )}
 
+      {/* Airbnb の帯の見方 */}
+      {(data.stays ?? []).length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+          <span>IN＝チェックイン（清掃は当日）</span>
+          <span>{CLEANING_MARK.ready.icon} {CLEANING_MARK.ready.label}</span>
+          <span>{CLEANING_MARK.unassigned.icon} {CLEANING_MARK.unassigned.label}</span>
+          <span>{CLEANING_MARK.missing.icon} {CLEANING_MARK.missing.label}</span>
+          <span className="inline-flex items-center gap-1">
+            <span className="px-1 rounded border border-dashed border-slate-400">未記入</span>
+            人数未入力
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="w-4 h-2 rounded bg-slate-200" /> ブロック
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="px-1 rounded bg-amber-500 text-white font-bold">IN×2</span>
+            2棟同日チェックイン
+          </span>
+        </div>
+      )}
+
       {/* 種別の凡例 */}
       {data.types.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -190,6 +309,9 @@ export default function CalendarView({
             shifts={data.shifts}
             users={data.users}
             actuals={data.actuals}
+            properties={data.properties}
+            stays={data.stays ?? []}
+            cleaning={cleaning}
             onSelect={setSelectedDate}
             selectedDate={selectedDate}
           />
@@ -200,6 +322,7 @@ export default function CalendarView({
               size="md"
               onClick={() => {
                 setEditing(null);
+                setPrefill(null);
                 setFormOpen(true);
               }}
             >
@@ -218,8 +341,12 @@ export default function CalendarView({
               onChanged={() => load(month)}
               onEditSchedule={(sc) => {
                 setEditing(sc);
+                setPrefill(null);
                 setFormOpen(true);
               }}
+              stays={data.stays ?? []}
+              cleaning={cleaning}
+              onCreateCleaning={openCleaningForm}
             />
           )}
         </>
@@ -231,19 +358,23 @@ export default function CalendarView({
           // React が同じフォームを使い回す。初期値は useState で
           // 一度しか評価されないため、メモや人数が前のまま残る。
           // 対象が変わったら作り直させる。
-          key={editing?.id ?? 'new'}
+          key={editing?.id ?? (prefill ? `new-${prefill.propertyId}-${prefill.date}` : 'new')}
           properties={data.properties}
           types={data.types}
           users={data.users}
           schedule={editing}
-          defaultDate={selectedDate ?? todayJst()}
+          defaultDate={prefill?.date ?? selectedDate ?? todayJst()}
+          defaultPropertyId={prefill?.propertyId}
+          defaultTypeId={prefill?.typeId}
           onClose={() => {
             setFormOpen(false);
             setEditing(null);
+            setPrefill(null);
           }}
           onSaved={() => {
             setFormOpen(false);
             setEditing(null);
+            setPrefill(null);
             void load(month);
           }}
         />

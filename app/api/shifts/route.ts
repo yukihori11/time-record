@@ -17,16 +17,19 @@ import { monthRange } from '@/app/lib/domain/datetime';
 /**
  * シフト一覧。
  *
- * 誰がどの棟に入るかはスタッフ同士でも見える方が運用しやすいので
- * 全員分を返す（RLS も SELECT は全許可）。
+ * スタッフには自分のシフトだけを返す（他のスタッフの担当は見せない方針）。
+ * RLS の SELECT は全許可のままなので、ここで必ず絞る。
+ * 管理者は userId で絞り込める。
  */
 export const GET = withLogging('shifts.get', async (request: Request) => {
   try {
-    const { supabase } = await requireUser();
+    const { supabase, profile } = await requireUser();
     const url = new URL(request.url);
 
     const monthParam = url.searchParams.get('month');
-    const userId = url.searchParams.get('userId');
+    const requestedUserId = url.searchParams.get('userId');
+    // スタッフは指定にかかわらず自分だけ
+    const userId = profile.role === 'admin' ? requestedUserId : profile.id;
 
     let from: string;
     let to: string;

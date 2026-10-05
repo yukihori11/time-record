@@ -43,6 +43,8 @@ export const POST = withLogging('reservation-types.post', async (request: Reques
         color: str(body.color ?? '#3b82f6', '色', { max: 7 }),
         icon: optionalStr(body.icon, 'アイコン', 8) ?? '',
         has_guests: body.hasGuests !== false,
+        // 未適用の環境でも追加できるよう、指定があるときだけ送る
+        ...(body.isCleaning !== undefined ? { is_cleaning: Boolean(body.isCleaning) } : {}),
         display_order: body.displayOrder
           ? int(body.displayOrder, '表示順', { min: 0, max: 999 })
           : 0,

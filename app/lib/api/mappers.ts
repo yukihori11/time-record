@@ -8,6 +8,7 @@ import type {
   ReservationType,
   Schedule,
   Shift,
+  Stay,
   WorkSession,
 } from '@/app/types/domain';
 
@@ -104,6 +105,7 @@ export function toReservationType(row: any): ReservationType {
     color: row.color,
     icon: row.icon ?? '',
     hasGuests: row.has_guests,
+    isCleaning: row.is_cleaning ?? false,
     isActive: row.is_active,
     displayOrder: row.display_order,
   };
@@ -121,6 +123,20 @@ export function toShift(row: any): Shift {
     status: row.status,
     respondedAt: row.responded_at ? new Date(row.responded_at) : null,
     declineReason: row.decline_reason ?? null,
+    note: row.note ?? null,
+  };
+}
+
+/** airbnb_stays の行 → Stay */
+export function toStay(row: any): Stay {
+  return {
+    id: row.id,
+    propertyId: row.property_id,
+    kind: row.kind,
+    checkIn: row.check_in,
+    checkOut: row.check_out,
+    reservationCode: row.reservation_code ?? null,
+    guestCount: row.guest_count ?? null,
     note: row.note ?? null,
   };
 }

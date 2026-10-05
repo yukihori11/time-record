@@ -493,9 +493,25 @@ function PropertySection({
               }}
               className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-slate-800 px-1 py-1 rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
-            <span className="text-xs text-slate-400 shrink-0">
-              定員{p.capacity ?? '—'}
-            </span>
+            <label className="flex items-center gap-1 text-xs text-slate-500 shrink-0">
+              定員
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={100}
+                defaultValue={p.capacity ?? ''}
+                onBlur={(e) => {
+                  const next = e.target.value === '' ? null : Number(e.target.value);
+                  if (next !== (p.capacity ?? null)) {
+                    update(p.id, { capacity: next });
+                  }
+                }}
+                className="w-12 text-center bg-transparent text-sm font-semibold text-slate-800 px-1 py-1 rounded focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                aria-label={`${p.name}の定員`}
+              />
+              名
+            </label>
             <button
               onClick={() => update(p.id, { isActive: !p.isActive })}
               className={`text-xs px-2 py-1.5 rounded-lg font-semibold shrink-0 ${

@@ -6,7 +6,8 @@ import type {
   Schedule,
   Shift,
 } from '@/app/types/domain';
-import { todayJst } from '@/app/lib/domain/datetime';
+import { formatDateJa, todayJst } from '@/app/lib/domain/datetime';
+import type { CheckInItem, CleaningStatus } from '@/app/lib/domain/stays';
 import { formatYen } from '@/app/lib/domain/format';
 import { Card } from '@/app/components/ui/Feedback';
 import NotificationList from '@/app/components/NotificationList';
@@ -32,7 +33,17 @@ interface DashboardData {
   types: ReservationType[];
   shifts: Shift[];
   staleCount: number;
+  checkIns: {
+    today: { date: string; items: CheckInItem[] };
+    tomorrow: { date: string; items: CheckInItem[] };
+  };
 }
+
+const CLEANING_BADGE: Record<CleaningStatus, { label: string; className: string }> = {
+  ready: { label: '✅ 清掃OK', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  unassigned: { label: '🟡 担当未確定', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  missing: { label: '🔴 清掃未手配', className: 'bg-red-50 text-red-600 border-red-200' },
+};
 
 export default function AdminDashboard({
   initialData,
@@ -48,6 +59,7 @@ export default function AdminDashboard({
     types,
     shifts,
     staleCount,
+    checkIns,
   } = initialData;
 
   const today = todayJst();
@@ -96,6 +108,20 @@ export default function AdminDashboard({
           </div>
         </Link>
       )}
+
+      {/* 今日・明日のチェックイン。清掃の漏れを防ぐため一番上に置く */}
+      <Card className="p-5">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="font-bold text-slate-900">チェックイン</h2>
+          <Link href="/calendar" className="text-xs font-semibold text-blue-600">
+            カレンダーで見る →
+          </Link>
+        </div>
+        <div className="space-y-4">
+          <CheckInDay label="今日" day={checkIns.today} propertyMap={propertyMap} />
+          <CheckInDay label="明日" day={checkIns.tomorrow} propertyMap={propertyMap} />
+        </div>
+      </Card>
 
       {/* 今日の予定 */}
       <Card className="p-5">
@@ -185,5 +211,71 @@ export default function AdminDashboard({
         ))}
       </div>
     </div>
+  );
+}
+
+function CheckInDay({
+  label,
+  day,
+  propertyMap,
+}: {
+  label: string;
+  day: { date: string; items: CheckInItem[] };
+  propertyMap: Map<string, Property>;
+}) {
+  return (
+    <section>
+      <div className="flex items-baseline gap-2 mb-1.5">
+        <h3 className="text-sm font-bold text-slate-800">{label}</h3>
+        <span className="text-xs text-slate-400">{formatDateJa(day.date)}</span>
+        <span className="ml-auto text-sm font-bold text-blue-600">
+          {day.items.length}件
+        </span>
+      </div>
+
+      {day.items.length === 0 ? (
+        <p className="text-sm text-slate-400 px-3 py-2 rounded-lg bg-slate-50">
+          チェックインはありません
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {day.items.map(({ stay, cleaning, isTurnover }) => {
+            const property = propertyMap.get(stay.propertyId);
+            const badge = CLEANING_BADGE[cleaning];
+            return (
+              <li
+                key={stay.id}
+                className="flex items-center gap-2 text-sm px-3 py-2.5 rounded-lg bg-slate-50 border-l-4"
+                style={{ borderLeftColor: property?.color ?? '#94a3b8' }}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800 truncate">
+                    {property?.name ?? '棟不明'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {stay.guestCount ? (
+                      `${stay.guestCount}名`
+                    ) : (
+                      <span className="px-1 rounded border border-dashed border-slate-400">
+                        人数未記入
+                      </span>
+                    )}
+                    <span className="ml-2">〜 {formatDateJa(stay.checkOut)}</span>
+                    {isTurnover && (
+                      <span className="ml-2 font-semibold text-amber-700">入れ替え</span>
+                    )}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 text-xs font-bold px-2 py-1 rounded-lg border ${badge.className}`}
+                >
+                  {badge.label}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }

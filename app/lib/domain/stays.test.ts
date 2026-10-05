@@ -3,6 +3,7 @@ import type { ReservationType, Schedule, Shift, Stay } from '@/app/types/domain'
 import {
   calendarWeeks,
   checkInsByDate,
+  checkInsOn,
   cleaningStatus,
   planCancellations,
   scopeToStaff,
@@ -215,5 +216,34 @@ describe('scopeToStaff', () => {
   it('シフトが無ければ何も返さない', () => {
     const none = scopeToStaff('NOBODY', shifts, schedules, stays);
     expect(none).toEqual({ shifts: [], schedules: [], stays: [] });
+  });
+});
+
+describe('checkInsOn', () => {
+  const types: ReservationType[] = [
+    { id: 'T-CLEAN', name: 'チェックイン清掃', color: '#8b5cf6', icon: '🧹', hasGuests: false, isCleaning: true, isActive: true, displayOrder: 1 },
+  ];
+  const stays = [
+    stay({ id: 'b-in', propertyId: 'P2', checkIn: '2026-10-10', checkOut: '2026-10-12' }),
+    stay({ id: 'a-in', propertyId: 'P1', checkIn: '2026-10-10', checkOut: '2026-10-11' }),
+    stay({ id: 'a-prev', propertyId: 'P1', checkIn: '2026-10-08', checkOut: '2026-10-10' }),
+    stay({ id: 'blk', propertyId: 'P2', kind: 'blocked', checkIn: '2026-10-05', checkOut: '2026-10-10' }),
+  ];
+  const schedules: Schedule[] = [
+    { id: 'R1', propertyId: 'P1', typeId: 'T-CLEAN', guestCount: 0, scheduleDate: '2026-10-10', status: 'confirmed' },
+  ];
+
+  const items = checkInsOn('2026-10-10', stays, schedules, types, [], ['P1', 'P2']);
+
+  it('その日のチェックインだけを棟の順に並べる', () => {
+    expect(items.map((i) => i.stay.id)).toEqual(['a-in', 'b-in']);
+  });
+
+  it('前の宿泊が同じ日に出るなら入れ替え。ブロックの終わりは入れ替えにしない', () => {
+    expect(items.map((i) => i.isTurnover)).toEqual([true, false]);
+  });
+
+  it('清掃の状態を付ける', () => {
+    expect(items.map((i) => i.cleaning)).toEqual(['unassigned', 'missing']);
   });
 });

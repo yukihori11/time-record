@@ -215,3 +215,41 @@ export function scopeToStaff(
     ),
   };
 }
+
+// ------------------------------------------------------------
+// ホームに出すチェックインの一覧
+// ------------------------------------------------------------
+
+export interface CheckInItem {
+  stay: Stay;
+  cleaning: CleaningStatus;
+  /** 同じ棟で前の宿泊が同じ日にチェックアウトする（清掃できる時間が短い） */
+  isTurnover: boolean;
+}
+
+/** 指定日のチェックインを、清掃の状態と入れ替えの有無つきで並べる */
+export function checkInsOn(
+  date: string,
+  stays: Stay[],
+  schedules: Schedule[],
+  types: ReservationType[],
+  shifts: Shift[],
+  propertyOrder: string[]
+): CheckInItem[] {
+  const reserved = stays.filter((s) => s.kind === 'reserved');
+  const order = new Map(propertyOrder.map((id, i) => [id, i]));
+
+  return reserved
+    .filter((s) => s.checkIn === date)
+    .map((stay) => ({
+      stay,
+      cleaning: cleaningStatus(stay, schedules, types, shifts),
+      isTurnover: reserved.some(
+        (o) => o.id !== stay.id && o.propertyId === stay.propertyId && o.checkOut === date
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        (order.get(a.stay.propertyId) ?? 99) - (order.get(b.stay.propertyId) ?? 99)
+    );
+}

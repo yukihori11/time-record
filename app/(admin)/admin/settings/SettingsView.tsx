@@ -840,6 +840,68 @@ function TypeSection({
  * 本人がリンクからパスワードを設定してログインする。
  * こちらでパスワードを決めて伝える必要がない。
  */
+const APP_URL = 'https://time-record-kappa.vercel.app';
+
+/**
+ * スタッフに送る、通知の設定方法の案内文。
+ *
+ * iPhone は Safari で開いてホーム画面に追加し、そのアイコンから開かないと
+ * 通知を有効にできない（usePushNotification の needsInstall / needsSafari）。
+ * 手順や画面の文言を変えたら、ここも合わせて直すこと。
+ */
+const PUSH_GUIDE = [
+  '【シフトの通知を受け取る設定】',
+  'シフトが割り当てられたときにスマホへ通知が届きます。',
+  '',
+  '■ iPhone の場合',
+  `1. Safari で ${APP_URL} を開く（LINE などのアプリ内では設定できません）`,
+  '2. 画面下の共有ボタン（□に↑）→「ホーム画面に追加」',
+  '3. ホーム画面に追加されたアイコンからアプリを開いてログイン',
+  '4. 下のメニューの「設定」→「シフトの通知」の「通知を有効にする」を押す',
+  '5. 「通知を許可しますか」と出たら「許可」',
+  '',
+  '■ Android の場合',
+  `1. Chrome で ${APP_URL} を開いてログイン`,
+  '2. 下のメニューの「設定」→「シフトの通知」の「通知を有効にする」を押す',
+  '3. 「通知を許可しますか」と出たら「許可」',
+  '',
+  '「受け取る」と表示されれば設定完了です。',
+  '機種を変えたときや別の端末で使うときは、その端末でもう一度設定してください。',
+].join('\n');
+
+/** 通知の設定方法の案内。そのままコピーしてスタッフに送れる */
+function PushGuide() {
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const copy = async () => {
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(PUSH_GUIDE);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError('コピーできませんでした。下の文章を長押ししてコピーしてください');
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-slate-200">
+      <h3 className="text-sm font-bold text-slate-900 mb-1">通知の設定方法を送る</h3>
+      <p className="text-xs text-slate-500 mb-2">
+        スタッフがシフトの通知を受け取るための手順です。コピーして LINE などで送ってください。
+      </p>
+      <ErrorBanner message={error} />
+      <pre className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-3 whitespace-pre-wrap break-words font-sans leading-relaxed max-h-56 overflow-y-auto select-all">
+        {PUSH_GUIDE}
+      </pre>
+      <Button size="md" fullWidth variant="secondary" className="mt-2" onClick={copy}>
+        {copied ? 'コピーしました' : '通知の設定方法をコピー'}
+      </Button>
+    </div>
+  );
+}
+
 /** ランダムなパスワードを作る。伝えやすさを優先して紛らわしい文字を除く */
 function generatePassword(length = 10): string {
   // 0/O/1/l/I など見間違えやすい文字は入れない
@@ -895,7 +957,7 @@ function InviteSection({ onInvited }: { onInvited: () => void }) {
     if (!created) return;
     const text = [
       '民泊 勤怠アプリ',
-      'https://time-record-kappa.vercel.app',
+      APP_URL,
       '',
       `ID: ${created.email}`,
       `パスワード: ${created.password}`,
@@ -949,6 +1011,8 @@ function InviteSection({ onInvited }: { onInvited: () => void }) {
             閉じる
           </Button>
         </div>
+
+        <PushGuide />
       </Card>
     );
   }
@@ -1029,6 +1093,9 @@ function InviteSection({ onInvited }: { onInvited: () => void }) {
           このスタッフを追加する
         </Button>
       </form>
+
+      {/* 追加済みのスタッフにも送れるよう、フォームの外に常に出しておく */}
+      <PushGuide />
     </Card>
   );
 }

@@ -10,10 +10,13 @@ import {
   toReservationType,
   toSettings,
   toShift,
+  toStay,
   toWorkSession,
 } from '@/app/lib/api/mappers';
 import { calcMonthlySalary, DEFAULT_SETTINGS } from '@/app/lib/domain/payroll';
-import { monthRange, todayJst } from '@/app/lib/domain/datetime';
+import { addDays, monthRange, todayJst } from '@/app/lib/domain/datetime';
+import { checkInsOn } from '@/app/lib/domain/stays';
+import { log } from '@/app/lib/api/logger';
 import AdminDashboard from './AdminDashboard';
 
 export const metadata = { title: '管理 | 民泊勤怠管理' };
@@ -30,6 +33,7 @@ async function loadDashboard() {
   const { supabase } = await guardAdminPage('/admin');
 
   const today = todayJst();
+  const tomorrow = addDays(today, 1);
   const month = today.slice(0, 7);
   const { from, to } = monthRange(month);
 
@@ -42,6 +46,9 @@ async function loadDashboard() {
     propertiesRes,
     typesRes,
     shiftsRes,
+    staysRes,
+    nearSchedulesRes,
+    nearShiftsRes,
   ] = await Promise.all([
     supabase
       .from('users')
@@ -76,7 +83,41 @@ async function loadDashboard() {
       .select('*')
       .gte('shift_date', from)
       .lte('shift_date', to),
+
+    // 今日・明日のチェックイン。入れ替えの判定に、同じ日に出る宿泊も要る
+    supabase
+      .from('airbnb_stays')
+      .select('id, property_id, kind, check_in, check_out, reservation_code, guest_count, note')
+      .eq('status', 'active')
+      .eq('kind', 'reserved')
+      .lte('check_in', tomorrow)
+      .gte('check_out', today),
+
+    // チェックイン当日の清掃の判定用。月末だと明日が翌月になるため
+    // 月の範囲とは別に今日・明日の分を取る
+    supabase
+      .from('reservations')
+      .select('*')
+      .eq('status', 'confirmed')
+      .gte('schedule_date', today)
+      .lte('schedule_date', tomorrow),
+    supabase
+      .from('shifts')
+      .select('*')
+      .gte('shift_date', today)
+      .lte('shift_date', tomorrow),
   ]);
+
+  // migration 未適用の環境では表が無い。ホームごと落とさずチェックインなしで出す
+  if (staysRes.error) {
+    log.warn('dashboard.stays_unavailable', { code: staysRes.error.code, message: staysRes.error.message });
+  }
+  const stays = staysRes.error ? [] : (staysRes.data ?? []).map(toStay);
+  const nearSchedules = (nearSchedulesRes.data ?? []).map(toSchedule);
+  const nearShifts = (nearShiftsRes.data ?? []).map(toShift);
+  const properties = (propertiesRes.data ?? []).map(toProperty);
+  const types = (typesRes.data ?? []).map(toReservationType);
+  const propertyOrder = properties.map((p) => p.id);
 
   const settings = settingsRes.data
     ? toSettings(settingsRes.data)
@@ -109,8 +150,12 @@ async function loadDashboard() {
     salaries,
     grandTotal: salaries.reduce((sum, r) => sum + r.salary.totalAmount, 0),
     schedules: (reservationsRes.data ?? []).map(toSchedule),
-    properties: (propertiesRes.data ?? []).map(toProperty),
-    types: (typesRes.data ?? []).map(toReservationType),
+    properties,
+    types,
+    checkIns: {
+      today: { date: today, items: checkInsOn(today, stays, nearSchedules, types, nearShifts, propertyOrder) },
+      tomorrow: { date: tomorrow, items: checkInsOn(tomorrow, stays, nearSchedules, types, nearShifts, propertyOrder) },
+    },
     shifts: (shiftsRes.data ?? []).map(toShift),
     staleCount: allSessions.filter(
       (s) => s.clockOut === null && s.clockIn.getTime() < twelveHoursAgo

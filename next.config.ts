@@ -6,6 +6,7 @@ import type { NextConfig } from "next";
  * - 他のサイトの中に埋め込ませない（ボタンを押させる攻撃を防ぐ）
  * - 種類の決めつけ・遷移元 URL の漏れを防ぐ
  * - 使っていない端末の機能（位置情報・カメラ・マイク）を止める
+ * - 検索結果に出さない
  *
  * スクリプトを絞る CSP は Next.js のインラインスクリプトと衝突しやすいため入れていない。
  * 位置情報などを使う機能を足すときは Permissions-Policy を見直すこと。
@@ -15,6 +16,10 @@ const securityHeaders = [
   { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // 検索結果に出さない。ログイン画面も含め、社内向けのアプリなので載せる理由が無い。
+  // robots.txt で読むのを止めると noindex 自体が読まれず、すでに載ったページが消えないため、
+  // 読むのは止めずに「載せない」とだけ伝える
+  { key: "X-Robots-Tag", value: "noindex, nofollow" },
   {
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=(), payment=()",

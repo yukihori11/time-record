@@ -11,6 +11,8 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: '勤怠管理',
   },
+  // 社内向けのアプリなので、検索結果に出さない（next.config.ts の X-Robots-Tag と同じ）
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {

@@ -11,7 +11,8 @@ import type {
 } from '@/app/types/domain';
 import type { DayDetailData } from '@/app/lib/domain/occupancy';
 import type { CleaningStatus } from '@/app/lib/domain/stays';
-import StaySection from './StaySection';
+import StaySection, { SectionTitle } from './StaySection';
+import { staysOnDate } from '@/app/lib/domain/stays';
 import { formatDateJa, isPast } from '@/app/lib/domain/datetime';
 import { formatDuration, formatYen } from '@/app/lib/domain/format';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
@@ -47,18 +48,43 @@ export default function DayDetail({
   onCreateCleaning: (propertyId: string, date: string) => void;
 }) {
   const userMap = new Map(users.map((u) => [u.id, u]));
+  const moves = staysOnDate(stays, detail.date);
 
   return (
     <Card className="p-4 space-y-5">
-      <div className="flex items-center justify-between">
-        <h2 className="font-bold text-slate-900">
+      {/* その日の概要。開いた瞬間に何がある日か分かるように */}
+      <div>
+        <h2 className="text-lg font-bold text-slate-900">
           {formatDateJa(detail.date)}
         </h2>
-        {detail.totalGuests > 0 && (
-          <span className="text-sm font-bold text-blue-600">
-            宿泊 {detail.totalGuests}名
+        <div className="mt-1.5 flex flex-wrap gap-1.5 text-xs font-bold">
+          {moves.checkOuts.length > 0 && (
+            <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-700">
+              ↑ OUT {moves.checkOuts.length}
+            </span>
+          )}
+          {moves.checkIns.length > 0 && (
+            <span className="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
+              ↓ IN {moves.checkIns.length}
+            </span>
+          )}
+          {moves.staying.length > 0 && (
+            <span className="px-2 py-1 rounded-full bg-sky-100 text-sky-700">
+              滞在中 {moves.staying.length}
+            </span>
+          )}
+          <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+            予定 {detail.schedules.length}
           </span>
-        )}
+          <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-600">
+            担当 {detail.shifts.length}人
+          </span>
+          {detail.totalGuests > 0 && (
+            <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+              宿泊 {detail.totalGuests}名
+            </span>
+          )}
+        </div>
       </div>
 
       {/* チェックインと当日の清掃。漏れを防ぐため予定より上に置く */}
@@ -74,52 +100,53 @@ export default function DayDetail({
 
       {/* その日の予定 */}
       <section>
-        <h3 className="text-xs font-bold text-slate-500 mb-2">予定</h3>
+        <SectionTitle>予定</SectionTitle>
         {detail.schedules.length === 0 ? (
-          <p className="text-sm text-slate-400">予定はありません</p>
+          <p className="text-sm text-slate-400 px-3 py-2 rounded-lg bg-slate-50">
+            予定はありません
+          </p>
         ) : (
           <ul className="space-y-2">
             {detail.schedules.map((item) => {
               const sc = item.schedule;
               const hasGuests = item.type?.hasGuests !== false;
+              const color = item.type?.color ?? '#94a3b8';
 
               return (
                 <li
                   key={sc.id}
-                  className="rounded-xl border border-slate-200 overflow-hidden"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 border-l-4"
+                  style={{ borderLeftColor: item.property?.color ?? '#94a3b8' }}
                 >
-                  <div
-                    className="px-3 py-2 text-white text-sm font-bold flex justify-between items-center"
-                    style={{ backgroundColor: item.type?.color ?? '#94a3b8' }}
-                  >
-                    <span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: `${color}22`, color }}
+                    >
                       {item.type?.icon} {item.type?.name ?? '種別なし'}
-                      <span className="opacity-90 font-normal ml-2">
-                        {item.property?.name ?? '棟不明'}
-                      </span>
+                    </span>
+                    <span className="text-sm font-bold text-slate-800 truncate">
+                      {item.property?.name ?? '棟不明'}
                     </span>
                     {hasGuests && sc.guestCount > 0 && (
-                      <span>{sc.guestCount}名</span>
+                      <span className="text-xs font-semibold text-slate-600 shrink-0">
+                        {sc.guestCount}名
+                      </span>
                     )}
-                  </div>
-
-                  <div className="px-3 py-2.5 space-y-1 text-sm bg-white">
-                    {sc.note && (
-                      <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-2 py-1.5 whitespace-pre-wrap">
-                        {sc.note}
-                      </p>
-                    )}
-
                     {isAdmin && onEditSchedule && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
+                      <button
                         onClick={() => onEditSchedule(sc)}
+                        className="ml-auto shrink-0 text-xs font-semibold text-blue-600 hover:text-blue-700 px-1"
                       >
-                        編集
-                      </Button>
+                        ✎ 編集
+                      </button>
                     )}
                   </div>
+                  {sc.note && (
+                    <p className="mt-2 text-xs text-slate-600 bg-slate-50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
+                      {sc.note}
+                    </p>
+                  )}
                 </li>
               );
             })}
@@ -227,23 +254,26 @@ function ShiftSection({
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-bold text-slate-500">この日に入る人</h3>
-        {isAdmin && (pending > 0 || declined > 0) && (
-          <span className="text-xs font-semibold">
-            {pending > 0 && (
-              <span className="text-amber-600">未回答{pending}</span>
-            )}
-            {pending > 0 && declined > 0 && ' / '}
-            {declined > 0 && <span className="text-red-500">辞退{declined}</span>}
-          </span>
-        )}
-      </div>
+      <SectionTitle
+        right={
+          isAdmin && (pending > 0 || declined > 0) ? (
+            <span className="text-xs font-semibold">
+              {pending > 0 && <span className="text-amber-600">未回答{pending}</span>}
+              {pending > 0 && declined > 0 && ' / '}
+              {declined > 0 && <span className="text-red-500">辞退{declined}</span>}
+            </span>
+          ) : undefined
+        }
+      >
+        担当スタッフ
+      </SectionTitle>
 
       <ErrorBanner message={error} />
 
       {shifts.length === 0 ? (
-        <p className="text-sm text-slate-400">シフトはありません</p>
+        <p className="text-sm text-slate-400 px-3 py-2 rounded-lg bg-slate-50">
+          シフトはありません
+        </p>
       ) : (
         <ul className="space-y-2 mt-2">
           {shifts.map((shift) => {
@@ -259,11 +289,17 @@ function ShiftSection({
               <li
                 key={shift.id}
                 className={`rounded-xl border px-3 py-2.5 ${
-                  isMine ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200'
+                  isMine ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200 bg-white'
                 }`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={`shrink-0 w-8 h-8 rounded-full inline-flex items-center justify-center text-sm font-bold ${AVATAR[shift.status]}`}
+                    aria-hidden
+                  >
+                    {Array.from(userMap.get(shift.userId)?.name || 'ス')[0]}
+                  </span>
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-800 truncate">
                       {userMap.get(shift.userId)?.name || 'スタッフ'}
                       {isMine && (
@@ -453,6 +489,13 @@ function ShiftSection({
     </section>
   );
 }
+
+/** カレンダーのスタッフの丸と同じ色づかい */
+const AVATAR: Record<Shift['status'], string> = {
+  accepted: 'bg-emerald-500 text-white',
+  assigned: 'bg-white text-amber-600 ring-1 ring-inset ring-amber-400',
+  declined: 'bg-red-50 text-red-300',
+};
 
 function StatusBadge({ status }: { status: Shift['status'] }) {
   const style = {

@@ -6,9 +6,10 @@ import type {
   Schedule,
   Shift,
 } from '@/app/types/domain';
-import { formatDateJa, todayJst } from '@/app/lib/domain/datetime';
-import type { CheckInItem, CleaningStatus } from '@/app/lib/domain/stays';
+import { formatDateShort, todayJst } from '@/app/lib/domain/datetime';
+import type { CheckInItem, CheckOutItem } from '@/app/lib/domain/stays';
 import { airbnbReservationUrl } from '@/app/lib/domain/stays';
+import { CLEANING_BADGE, GuestCount, MoveBadge, StayRange } from '@/app/components/StayBadges';
 import { formatYen } from '@/app/lib/domain/format';
 import { Card } from '@/app/components/ui/Feedback';
 import NotificationList from '@/app/components/NotificationList';
@@ -34,16 +35,15 @@ interface DashboardData {
   types: ReservationType[];
   shifts: Shift[];
   staleCount: number;
-  checkIns: {
-    today: { date: string; items: CheckInItem[] };
-    tomorrow: { date: string; items: CheckInItem[] };
-  };
+  /** 今日・明日の宿泊の出入り */
+  stayDays: { date: string; checkIns: CheckInItem[]; checkOuts: CheckOutItem[] }[];
+  users: { id: string; name: string; email: string }[];
 }
 
-const CLEANING_BADGE: Record<CleaningStatus, { label: string; className: string }> = {
-  ready: { label: '✅ 清掃OK', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  unassigned: { label: '🟡 担当未確定', className: 'bg-amber-50 text-amber-700 border-amber-200' },
-  missing: { label: '🔴 清掃未手配', className: 'bg-red-50 text-red-600 border-red-200' },
+const SHIFT_STATUS: Record<Shift['status'], { label: string; className: string }> = {
+  accepted: { label: '承諾', className: 'text-emerald-700' },
+  assigned: { label: '未回答', className: 'text-amber-700' },
+  declined: { label: '辞退', className: 'text-red-500 line-through' },
 };
 
 export default function AdminDashboard({
@@ -60,7 +60,8 @@ export default function AdminDashboard({
     types,
     shifts,
     staleCount,
-    checkIns,
+    stayDays,
+    users,
   } = initialData;
 
   const today = todayJst();
@@ -70,6 +71,14 @@ export default function AdminDashboard({
   );
   const propertyMap = new Map(properties.map((p) => [p.id, p]));
   const typeMap = new Map(types.map((t) => [t.id, t]));
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  const propertyOrder = new Map(properties.map((p, i) => [p.id, i]));
+
+  // 棟の並び順に揃える（設定画面の順）
+  const todaySchedules = [...activeToday].sort(
+    (a, b) =>
+      (propertyOrder.get(a.propertyId) ?? 99) - (propertyOrder.get(b.propertyId) ?? 99)
+  );
 
   // 客が滞在する種別だけを人数に数える
   const guestsToday = activeToday
@@ -110,57 +119,98 @@ export default function AdminDashboard({
         </Link>
       )}
 
-      {/* 今日・明日のチェックイン。清掃の漏れを防ぐため一番上に置く */}
+      {/* 今日・明日の宿泊の出入り。清掃の漏れを防ぐため上に置く */}
       <Card className="p-5">
         <div className="flex items-baseline justify-between mb-3">
-          <h2 className="font-bold text-slate-900">チェックイン</h2>
+          <h2 className="font-bold text-slate-900">宿泊の出入り</h2>
           <Link href="/calendar" className="text-xs font-semibold text-blue-600">
             カレンダーで見る →
           </Link>
         </div>
-        <div className="space-y-4">
-          <CheckInDay label="今日" day={checkIns.today} propertyMap={propertyMap} />
-          <CheckInDay label="明日" day={checkIns.tomorrow} propertyMap={propertyMap} />
+        <div className="space-y-5">
+          {stayDays.map((day, i) => (
+            <StayDay
+              key={day.date}
+              label={i === 0 ? '今日' : '明日'}
+              day={day}
+              propertyMap={propertyMap}
+            />
+          ))}
         </div>
       </Card>
 
       {/* 今日の予定 */}
       <Card className="p-5">
         <div className="flex items-baseline justify-between mb-3">
-          <h2 className="font-bold text-slate-900">今日の予定</h2>
-          <span className="text-2xl font-bold text-blue-600">
-            {guestsToday}名
-          </span>
+          <h2 className="font-bold text-slate-900">
+            今日の予定
+            <span className="ml-2 text-xs font-normal text-slate-400">
+              {formatDateShort(today)}
+            </span>
+          </h2>
+          {guestsToday > 0 && (
+            <span className="text-sm text-slate-500">
+              宿泊 <span className="text-xl font-bold text-blue-600">{guestsToday}</span> 名
+            </span>
+          )}
         </div>
 
-        {activeToday.length === 0 ? (
-          <p className="text-sm text-slate-400">本日の予定はありません</p>
+        {todaySchedules.length === 0 ? (
+          <p className="text-sm text-slate-400 px-3 py-2 rounded-lg bg-slate-50">
+            今日の予定はありません
+          </p>
         ) : (
-          <ul className="space-y-1.5">
-            {activeToday.map((r) => (
-              <li
-                key={r.id}
-                className="flex items-center justify-between text-sm px-3 py-2 rounded-lg bg-slate-50"
-              >
-                <span className="flex items-center gap-2 font-semibold text-slate-700">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{
-                      backgroundColor:
-                        typeMap.get(r.typeId)?.color ?? '#94a3b8',
-                    }}
-                  />
-                  {typeMap.get(r.typeId)?.icon}{' '}
-                  {propertyMap.get(r.propertyId)?.name ?? '棟不明'}
-                </span>
-                <span className="text-slate-500">
-                  {typeMap.get(r.typeId)?.name}
-                  {typeMap.get(r.typeId)?.hasGuests !== false &&
-                    r.guestCount > 0 &&
-                    ` / ${r.guestCount}名`}
-                </span>
-              </li>
-            ))}
+          <ul className="space-y-2">
+            {todaySchedules.map((r) => {
+              const type = typeMap.get(r.typeId);
+              const property = propertyMap.get(r.propertyId);
+              const staff = shifts.filter((sh) => sh.reservationId === r.id);
+              return (
+                <li
+                  key={r.id}
+                  className="px-3 py-2.5 rounded-lg bg-slate-50 border-l-4"
+                  style={{ borderLeftColor: property?.color ?? '#94a3b8' }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full text-white"
+                      style={{ backgroundColor: type?.color ?? '#94a3b8' }}
+                    >
+                      {type?.icon} {type?.name ?? '予定'}
+                    </span>
+                    <span className="font-bold text-slate-800 truncate">
+                      {property?.name ?? '棟不明'}
+                    </span>
+                    {type?.hasGuests !== false && r.guestCount > 0 && (
+                      <span className="ml-auto shrink-0 text-sm font-semibold text-slate-600">
+                        {r.guestCount}名
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {staff.length === 0 ? (
+                      <span className="font-semibold text-red-500">担当なし</span>
+                    ) : (
+                      <>
+                        担当：
+                        {staff.map((sh, idx) => {
+                          const u = userMap.get(sh.userId);
+                          const st = SHIFT_STATUS[sh.status];
+                          return (
+                            <span key={sh.id} className={`font-semibold ${st.className}`}>
+                              {idx > 0 && '、'}
+                              {u?.name || u?.email || 'スタッフ'}
+                              {sh.startTime && ` ${sh.startTime}〜`}
+                              {sh.status !== 'accepted' && `（${st.label}）`}
+                            </span>
+                          );
+                        })}
+                      </>
+                    )}
+                  </p>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>
@@ -215,73 +265,104 @@ export default function AdminDashboard({
   );
 }
 
-function CheckInDay({
+function StayDay({
   label,
   day,
   propertyMap,
 }: {
   label: string;
-  day: { date: string; items: CheckInItem[] };
+  day: { date: string; checkIns: CheckInItem[]; checkOuts: CheckOutItem[] };
   propertyMap: Map<string, Property>;
 }) {
+  const empty = day.checkIns.length === 0 && day.checkOuts.length === 0;
+
   return (
     <section>
-      <div className="flex items-baseline gap-2 mb-1.5">
+      <div className="flex items-center gap-2 mb-2">
         <h3 className="text-sm font-bold text-slate-800">{label}</h3>
-        <span className="text-xs text-slate-400">{formatDateJa(day.date)}</span>
-        <span className="ml-auto text-sm font-bold text-blue-600">
-          {day.items.length}件
+        <span className="text-xs text-slate-400">{formatDateShort(day.date)}</span>
+        <span className="ml-auto flex gap-1.5 text-xs font-bold">
+          <span className="text-orange-600">OUT {day.checkOuts.length}</span>
+          <span className="text-slate-300">/</span>
+          <span className="text-emerald-700">IN {day.checkIns.length}</span>
         </span>
       </div>
 
-      {day.items.length === 0 ? (
+      {empty ? (
         <p className="text-sm text-slate-400 px-3 py-2 rounded-lg bg-slate-50">
-          チェックインはありません
+          出入りはありません
         </p>
       ) : (
+        // 1日の流れに合わせて、出る（午前）→ 入る（午後）の順に並べる
         <ul className="space-y-1.5">
-          {day.items.map(({ stay, cleaning, isTurnover }) => {
+          {day.checkOuts.map(({ stay, isTurnover }) => {
             const property = propertyMap.get(stay.propertyId);
-            const badge = CLEANING_BADGE[cleaning];
             return (
               <li
-                key={stay.id}
-                className="flex items-center gap-2 text-sm px-3 py-2.5 rounded-lg bg-slate-50 border-l-4"
+                key={`out-${stay.id}`}
+                className="flex items-center gap-2.5 text-sm px-2.5 py-2 rounded-lg bg-orange-50/60 border-l-4"
                 style={{ borderLeftColor: property?.color ?? '#94a3b8' }}
               >
+                <MoveBadge kind="out" />
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-slate-800 truncate">
                     {property?.name ?? '棟不明'}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {stay.guestCount ? (
-                      `${stay.guestCount}名`
-                    ) : (
-                      <span className="px-1 rounded border border-dashed border-slate-400">
-                        人数未記入
+                    {isTurnover && (
+                      <span className="ml-2 text-[11px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                        同日に次の客
                       </span>
                     )}
-                    <span className="ml-2">〜 {formatDateJa(stay.checkOut)}</span>
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    <StayRange stay={stay} />
+                  </p>
+                </div>
+              </li>
+            );
+          })}
+
+          {day.checkIns.map(({ stay, cleaning, isTurnover }) => {
+            const property = propertyMap.get(stay.propertyId);
+            const badge = CLEANING_BADGE[cleaning];
+            const url = airbnbReservationUrl(stay.reservationCode);
+            return (
+              <li
+                key={`in-${stay.id}`}
+                className="flex items-center gap-2.5 text-sm px-2.5 py-2 rounded-lg bg-emerald-50/60 border-l-4"
+                style={{ borderLeftColor: property?.color ?? '#94a3b8' }}
+              >
+                <MoveBadge kind="in" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800 truncate">
+                    {property?.name ?? '棟不明'}
+                    <span className="ml-2 text-xs">
+                      <GuestCount count={stay.guestCount} />
+                    </span>
                     {isTurnover && (
-                      <span className="ml-2 font-semibold text-amber-700">入れ替え</span>
+                      <span className="ml-2 text-[11px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                        入れ替え
+                      </span>
                     )}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    <StayRange stay={stay} />
                   </p>
                 </div>
                 <div className="shrink-0 flex flex-col items-end gap-1">
                   <span
-                    className={`text-xs font-bold px-2 py-1 rounded-lg border ${badge.className}`}
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${badge.className}`}
                   >
-                    {badge.label}
+                    {badge.icon} {badge.label}
                   </span>
                   {/* 人数は iCal に無いので、Airbnb の予約ページで確かめてもらう */}
-                  {airbnbReservationUrl(stay.reservationCode) && (
+                  {url && (
                     <a
-                      href={airbnbReservationUrl(stay.reservationCode) ?? undefined}
+                      href={url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[11px] font-bold text-rose-600"
                     >
-                      Airbnb で開く ↗
+                      Airbnb ↗
                     </a>
                   )}
                 </div>

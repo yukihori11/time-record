@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import { Card } from '@/app/components/ui/Feedback';
+import Sheet from '@/app/components/ui/Sheet';
 
 interface Notification {
   id: string;
@@ -45,7 +46,7 @@ export default function NotificationList() {
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -82,73 +83,102 @@ export default function NotificationList() {
   // 読み込み中や、お知らせが無いときは場所を取らない
   if (loading || (items.length === 0 && !error)) return null;
 
-  const visible = expanded ? items : items.slice(0, 3);
+  // ホームが長くならないよう、最新の1件だけを出す。残りはパネルで見る
+  const latest = items[0];
+  const rest = items.length - 1;
 
   return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="font-bold text-slate-900">
-          お知らせ
-          {unread > 0 && (
-            <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs">
-              {unread}
-            </span>
-          )}
-        </h2>
-        {unread > 0 && (
-          <button
-            onClick={markAllRead}
-            className="text-xs text-slate-500 hover:text-slate-700"
-          >
-            すべて既読にする
-          </button>
-        )}
-      </div>
-
-      {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
-
-      <ul className="space-y-2">
-        {visible.map((n) => {
-          const content = (
-            <div
-              className={`px-3 py-2.5 rounded-xl border ${
-                n.readAt
-                  ? 'border-slate-200 bg-white'
-                  : 'border-blue-200 bg-blue-50'
-              }`}
+    <>
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-bold text-slate-900">
+            お知らせ
+            {unread > 0 && (
+              <span className="ml-2 px-2 py-0.5 rounded-full bg-red-500 text-white text-xs">
+                {unread}
+              </span>
+            )}
+          </h2>
+          {items.length > 1 && (
+            <button
+              onClick={() => setPanelOpen(true)}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700"
             >
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-semibold text-slate-800">
-                  {n.title}
-                </p>
-                <span className="text-xs text-slate-400 shrink-0">
-                  {timeAgo(n.createdAt)}
-                </span>
-              </div>
-              {n.body && (
-                <p className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">
-                  {n.body}
-                </p>
-              )}
-            </div>
-          );
+              すべて見る（他{rest}件）
+            </button>
+          )}
+        </div>
 
-          return (
-            <li key={n.id}>
-              {n.link ? <Link href={n.link}>{content}</Link> : content}
-            </li>
-          );
-        })}
-      </ul>
+        {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
 
-      {items.length > 3 && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="w-full text-xs text-slate-500 hover:text-slate-700 mt-2 py-1"
+        {latest && <NotificationItem n={latest} compact />}
+      </Card>
+
+      {panelOpen && (
+        <Sheet
+          title={`お知らせ（${items.length}件）`}
+          onClose={() => setPanelOpen(false)}
+          footer={
+            unread > 0 ? (
+              <button
+                onClick={markAllRead}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200"
+              >
+                すべて既読にする
+              </button>
+            ) : undefined
+          }
         >
-          {expanded ? '閉じる' : `他${items.length - 3}件を見る`}
-        </button>
+          <ul className="space-y-2">
+            {items.map((n) => (
+              <li key={n.id}>
+                <NotificationItem n={n} onNavigate={() => setPanelOpen(false)} />
+              </li>
+            ))}
+          </ul>
+        </Sheet>
       )}
-    </Card>
+    </>
+  );
+}
+
+function NotificationItem({
+  n,
+  compact = false,
+  onNavigate,
+}: {
+  n: Notification;
+  /** ホームでは本文を2行までにして場所を取らない */
+  compact?: boolean;
+  onNavigate?: () => void;
+}) {
+  const content = (
+    <div
+      className={`px-3 py-2.5 rounded-xl border ${
+        n.readAt ? 'border-slate-200 bg-white' : 'border-blue-200 bg-blue-50'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-800">{n.title}</p>
+        <span className="text-xs text-slate-400 shrink-0">{timeAgo(n.createdAt)}</span>
+      </div>
+      {n.body && (
+        <p
+          className={`text-xs text-slate-600 mt-1 whitespace-pre-wrap ${
+            compact ? 'line-clamp-2' : ''
+          }`}
+        >
+          {n.body}
+        </p>
+      )}
+    </div>
+  );
+
+  return n.link ? (
+    <Link href={n.link} onClick={onNavigate}>
+      {content}
+    </Link>
+  ) : (
+    content
   );
 }

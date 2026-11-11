@@ -4,18 +4,12 @@ import { useState } from 'react';
 import type { Property, Stay } from '@/app/types/domain';
 import type { CleaningStatus } from '@/app/lib/domain/stays';
 import { airbnbReservationUrl, staysOnDate } from '@/app/lib/domain/stays';
-import { formatDateJa } from '@/app/lib/domain/datetime';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
 import Button from '@/app/components/ui/Button';
 import { ErrorBanner } from '@/app/components/ui/Feedback';
 import { Input, Textarea } from '@/app/components/ui/Field';
-import { CLEANING_MARK } from './CalendarGrid';
-
-const CLEANING_STYLE: Record<CleaningStatus, string> = {
-  ready: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  unassigned: 'bg-amber-50 text-amber-700 border-amber-200',
-  missing: 'bg-red-50 text-red-600 border-red-200',
-};
+import type { MoveKind } from '@/app/components/StayBadges';
+import { CLEANING_BADGE, GuestCount, MoveBadge, StayRange } from '@/app/components/StayBadges';
 
 /**
  * 日付の詳細に出す Airbnb の宿泊。
@@ -50,13 +44,24 @@ export default function StaySection({
 
   return (
     <section>
-      <h3 className="text-xs font-bold text-slate-500 mb-2">Airbnb の宿泊</h3>
+      <SectionTitle>宿泊の出入り</SectionTitle>
+      {/* 1日の流れに合わせて、出る（午前）→ 入る（午後）→ 滞在中 の順 */}
       <ul className="space-y-2">
+        {checkOuts.map((s) => (
+          <StayItem
+            key={s.id}
+            stay={s}
+            kind="out"
+            property={propertyMap.get(s.propertyId)}
+            isAdmin={isAdmin}
+            onChanged={onChanged}
+          />
+        ))}
         {checkIns.map((s) => (
           <StayItem
             key={s.id}
             stay={s}
-            label="チェックイン"
+            kind="in"
             property={propertyMap.get(s.propertyId)}
             cleaning={cleaning.get(s.id)}
             isAdmin={isAdmin}
@@ -68,17 +73,7 @@ export default function StaySection({
           <StayItem
             key={s.id}
             stay={s}
-            label="滞在中"
-            property={propertyMap.get(s.propertyId)}
-            isAdmin={isAdmin}
-            onChanged={onChanged}
-          />
-        ))}
-        {checkOuts.map((s) => (
-          <StayItem
-            key={s.id}
-            stay={s}
-            label="チェックアウト"
+            kind="stay"
             property={propertyMap.get(s.propertyId)}
             isAdmin={isAdmin}
             onChanged={onChanged}
@@ -87,18 +82,18 @@ export default function StaySection({
         {blocks.map((s) => (
           <li
             key={s.id}
-            className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-sm"
+            className="flex items-center gap-2.5 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2.5 text-sm"
           >
-            <p className="font-bold text-slate-600">
-              ブロック
-              <span className="font-normal ml-2">
+            <MoveBadge kind="block" />
+            <div className="min-w-0">
+              <p className="font-bold text-slate-600 truncate">
                 {propertyMap.get(s.propertyId)?.name ?? '棟不明'}
-              </span>
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Airbnb で売り止めにしている期間です（予約ではありません）。
-              {formatDateJa(s.checkIn)} 〜 {formatDateJa(s.checkOut)}
-            </p>
+              </p>
+              <p className="text-xs text-slate-500">
+                <StayRange stay={s} showNights={false} />
+                <span className="ml-1.5">売り止め（予約ではありません）</span>
+              </p>
+            </div>
           </li>
         ))}
       </ul>
@@ -106,9 +101,25 @@ export default function StaySection({
   );
 }
 
+/** 詳細の中の小見出し。DayDetail と揃える */
+export function SectionTitle({
+  children,
+  right,
+}: {
+  children: React.ReactNode;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between mb-2">
+      <h3 className="text-xs font-bold text-slate-500 tracking-wide">{children}</h3>
+      {right}
+    </div>
+  );
+}
+
 function StayItem({
   stay,
-  label,
+  kind,
   property,
   cleaning,
   isAdmin,
@@ -116,7 +127,7 @@ function StayItem({
   onChanged,
 }: {
   stay: Stay;
-  label: string;
+  kind: MoveKind;
   property: Property | undefined;
   cleaning?: CleaningStatus;
   isAdmin: boolean;
@@ -124,76 +135,82 @@ function StayItem({
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const mark = cleaning ? CLEANING_MARK[cleaning] : null;
+  const badge = cleaning ? CLEANING_BADGE[cleaning] : null;
+  const tone =
+    kind === 'in' ? 'bg-emerald-50/50' : kind === 'out' ? 'bg-orange-50/50' : 'bg-white';
 
   return (
-    <li className="rounded-xl border border-slate-200 overflow-hidden">
+    <li className="rounded-xl border border-slate-200 bg-white overflow-hidden">
       <div
-        className="px-3 py-2 text-white text-sm font-bold flex justify-between items-center gap-2"
-        style={{ backgroundColor: property?.color ?? '#94a3b8' }}
+        className={`flex items-center gap-2.5 px-3 py-2.5 border-l-4 ${tone}`}
+        style={{ borderLeftColor: property?.color ?? '#94a3b8' }}
       >
-        <span className="truncate">
-          {label}
-          <span className="opacity-90 font-normal ml-2">{property?.name ?? '棟不明'}</span>
-        </span>
-        {stay.guestCount ? (
-          <span className="shrink-0">{stay.guestCount}名</span>
-        ) : (
-          <span className="shrink-0 text-xs px-1.5 py-0.5 rounded border border-dashed border-white/80 font-semibold">
-            人数未記入
-          </span>
-        )}
-      </div>
-
-      <div className="px-3 py-2.5 space-y-2 text-sm bg-white">
-        <p className="text-xs text-slate-500">
-          {formatDateJa(stay.checkIn)} 〜 {formatDateJa(stay.checkOut)}
-        </p>
-
-        {isAdmin && stay.reservationCode && (
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-slate-400">予約コード {stay.reservationCode}</p>
-            <AirbnbLink code={stay.reservationCode} />
-          </div>
-        )}
-
-        {stay.note && (
-          <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-2 py-1.5 whitespace-pre-wrap">
-            {stay.note}
-          </p>
-        )}
-
-        {mark && cleaning && (
-          <div
-            className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-xs font-bold ${CLEANING_STYLE[cleaning]}`}
-          >
-            <span>
-              {mark.icon} 当日の清掃：{mark.label}
+        <MoveBadge kind={kind} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-slate-800 truncate">
+            {property?.name ?? '棟不明'}
+            <span className="ml-2 text-xs">
+              <GuestCount count={stay.guestCount} />
             </span>
-            {isAdmin && cleaning === 'missing' && onCreateCleaning && (
-              <Button size="sm" onClick={() => onCreateCleaning(stay.propertyId, stay.checkIn)}>
-                清掃の予定を作る
-              </Button>
-            )}
-          </div>
-        )}
-
-        {isAdmin &&
-          (editing ? (
-            <GuestForm
-              stay={stay}
-              onDone={() => {
-                setEditing(false);
-                onChanged();
-              }}
-              onCancel={() => setEditing(false)}
-            />
-          ) : (
-            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-              人数・メモを入力
-            </Button>
-          ))}
+          </p>
+          <p className="text-xs text-slate-500">
+            <StayRange stay={stay} />
+          </p>
+        </div>
+        {isAdmin && <AirbnbLink code={stay.reservationCode} compact />}
       </div>
+
+      {(stay.note || (badge && cleaning) || isAdmin) && (
+        <div className="px-3 py-2.5 space-y-2 text-sm border-t border-slate-100">
+          {/* 清掃はチェックイン当日。入る側にだけ出す */}
+          {badge && cleaning && (
+            <div
+              className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-xs font-bold ${badge.className}`}
+            >
+              <span>
+                {badge.icon} 当日の清掃：{badge.label}
+              </span>
+              {isAdmin && cleaning === 'missing' && onCreateCleaning && (
+                <Button size="sm" onClick={() => onCreateCleaning(stay.propertyId, stay.checkIn)}>
+                  清掃の予定を作る
+                </Button>
+              )}
+            </div>
+          )}
+
+          {stay.note && (
+            <p className="text-xs text-slate-600 bg-slate-50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
+              {stay.note}
+            </p>
+          )}
+
+          {isAdmin &&
+            (editing ? (
+              <GuestForm
+                stay={stay}
+                onDone={() => {
+                  setEditing(false);
+                  onChanged();
+                }}
+                onCancel={() => setEditing(false)}
+              />
+            ) : (
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  onClick={() => setEditing(true)}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                >
+                  ✎ 人数・メモを入力
+                </button>
+                {stay.reservationCode && (
+                  <span className="text-[11px] text-slate-400 tabular-nums">
+                    {stay.reservationCode}
+                  </span>
+                )}
+              </div>
+            ))}
+        </div>
+      )}
     </li>
   );
 }
@@ -266,7 +283,14 @@ function GuestForm({
 }
 
 /** Airbnb の予約ページを開く。人数を確かめて入力するために使う */
-export function AirbnbLink({ code }: { code: string | null }) {
+export function AirbnbLink({
+  code,
+  compact = false,
+}: {
+  code: string | null;
+  /** 行の右端に置く小さい形 */
+  compact?: boolean;
+}) {
   const url = airbnbReservationUrl(code);
   if (!url) return null;
   return (
@@ -274,9 +298,11 @@ export function AirbnbLink({ code }: { code: string | null }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="shrink-0 inline-flex items-center gap-1 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg hover:bg-rose-100"
+      className={`shrink-0 inline-flex items-center gap-1 font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 ${
+        compact ? 'text-[11px] px-2 py-1' : 'text-xs px-2.5 py-1.5'
+      }`}
     >
-      Airbnb で予約を開く ↗
+      {compact ? 'Airbnb ↗' : 'Airbnb で予約を開く ↗'}
     </a>
   );
 }

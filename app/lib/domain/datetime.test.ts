@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPast, todayJst } from './datetime';
+import { formatDateShort, isPast, todayJst } from './datetime';
 
 /**
  * isPast はシフトの回答を変更できるかの判定に使う。
@@ -44,5 +44,12 @@ describe('isPast', () => {
     expect(todayJst(lateNight)).toBe('2026-08-12');
     expect(isPast('2026-08-11', lateNight)).toBe(true);
     expect(isPast('2026-08-12', lateNight)).toBe(false);
+  });
+});
+
+describe('formatDateShort', () => {
+  it('M/D(曜) の形にする', () => {
+    expect(formatDateShort('2026-11-12')).toBe('11/12(木)');
+    expect(formatDateShort('2026-01-05')).toBe('1/5(月)');
   });
 });

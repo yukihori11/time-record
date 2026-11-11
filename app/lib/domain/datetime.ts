@@ -91,6 +91,12 @@ export function formatDateJa(dateStr: string): string {
   return `${m}月${d}日(${WEEKDAYS[dayOfWeek(dateStr)]})`;
 }
 
+/** 'YYYY-MM-DD' → 'M/D(曜)'。期間を1行に収めたいところで使う */
+export function formatDateShort(dateStr: string): string {
+  const [, m, d] = dateStr.split('-').map(Number);
+  return `${m}/${d}(${WEEKDAYS[dayOfWeek(dateStr)]})`;
+}
+
 export function formatMonthJa(month: string): string {
   const [y, m] = month.split('-').map(Number);
   return `${y}年${m}月`;

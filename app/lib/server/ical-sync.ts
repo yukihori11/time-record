@@ -8,7 +8,7 @@ import {
   looksLikeIcal,
   parseAirbnbIcal,
 } from '@/app/lib/domain/ical';
-import { planCancellations } from '@/app/lib/domain/stays';
+import { countStayChanges, planCancellations } from '@/app/lib/domain/stays';
 import { todayJst } from '@/app/lib/domain/datetime';
 
 /**
@@ -33,6 +33,8 @@ export interface FeedSyncResult {
   cancelled: number;
   /** iCal が空だったためキャンセルを見送った */
   cancelSkipped: boolean;
+  /** 新規・変更・キャンセルの件数。0 なら画面を取り直す必要が無い */
+  changed: number;
   error?: string;
 }
 
@@ -70,7 +72,7 @@ async function syncFeed(
   admin: SupabaseClient,
   feed: FeedRow
 ): Promise<FeedSyncResult> {
-  const base = { propertyId: feed.property_id, upserted: 0, cancelled: 0, cancelSkipped: false };
+  const base = { propertyId: feed.property_id, upserted: 0, cancelled: 0, cancelSkipped: false, changed: 0 };
 
   try {
     if (!isAllowedIcalUrl(feed.ical_url)) {
@@ -79,6 +81,30 @@ async function syncFeed(
 
     const stays = parseAirbnbIcal(await fetchIcal(feed.ical_url));
     const now = new Date().toISOString();
+
+    // 取り込み前の状態と比べ、画面に見える変化があったかを数える。
+    // iCal に含まれる期間（最も早いチェックアウト以降）だけを読めば足りる
+    let added = 0;
+    if (stays.length > 0) {
+      const from = stays.reduce((min, s) => (s.checkOut < min ? s.checkOut : min), stays[0].checkOut);
+      const { data: stored, error: storedError } = await admin
+        .from('airbnb_stays')
+        .select('ical_uid, kind, check_in, check_out, reservation_code, status')
+        .eq('property_id', feed.property_id)
+        .gte('check_out', from);
+      if (storedError) throw storedError;
+      added = countStayChanges(
+        (stored ?? []).map((r) => ({
+          icalUid: r.ical_uid as string,
+          kind: r.kind as 'reserved' | 'blocked',
+          checkIn: r.check_in as string,
+          checkOut: r.check_out as string,
+          reservationCode: (r.reservation_code as string | null) ?? null,
+          status: r.status as 'active' | 'cancelled',
+        })),
+        stays
+      );
+    }
 
     if (stays.length > 0) {
       // 人数・メモは含めないので、既存行では上書きされない
@@ -144,6 +170,7 @@ async function syncFeed(
       upserted: stays.length,
       cancelled: plan.cancelIds.length,
       cancelSkipped: plan.skipped,
+      changed: added + plan.cancelIds.length,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : '取り込みに失敗しました';

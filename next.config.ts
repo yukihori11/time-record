@@ -22,6 +22,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // 開発中にスマホ（同じ Wi-Fi）から確認できるようにする。
+  // 指定が無いと localhost 以外には画面を動かすスクリプトが渡らず、
+  // 表示はされてもボタンが効かない（ログインできない）。開発時だけの設定で本番には影響しない
+  allowedDevOrigins: ["192.168.*.*", "10.*.*.*", "*.local"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

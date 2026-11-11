@@ -5,9 +5,13 @@ import {
   calendarWeeks,
   checkInsByDate,
   checkInsOn,
+  checkOutsOn,
   cleaningStatus,
+  countStayChanges,
   planCancellations,
+  rangeStayBars,
   scopeToStaff,
+  stayNights,
   staysOnDate,
   weekStayBars,
 } from './stays';
@@ -270,5 +274,111 @@ describe('staysOnDate のブロック', () => {
     expect(staysOnDate(stays, '2026-10-07').blocks.map((s) => s.id)).toEqual(['blk']);
     expect(staysOnDate(stays, '2026-10-09').blocks.map((s) => s.id)).toEqual(['blk']);
     expect(staysOnDate(stays, '2026-10-10').blocks).toEqual([]);
+  });
+});
+
+describe('countStayChanges', () => {
+  const row = {
+    icalUid: 'u1',
+    kind: 'reserved' as const,
+    checkIn: '2026-10-10',
+    checkOut: '2026-10-12',
+    reservationCode: 'HMABC123',
+    status: 'active' as const,
+  };
+  const feed = {
+    uid: 'u1',
+    kind: 'reserved' as const,
+    checkIn: '2026-10-10',
+    checkOut: '2026-10-12',
+    reservationCode: 'HMABC123',
+  };
+
+  it('内容が同じなら 0（取り直さない）', () => {
+    expect(countStayChanges([row], [feed])).toBe(0);
+  });
+
+  it('新しい予約は数える', () => {
+    expect(countStayChanges([row], [feed, { ...feed, uid: 'u2' }])).toBe(1);
+  });
+
+  it('日付・種別・予約コードの変更を数える', () => {
+    expect(countStayChanges([row], [{ ...feed, checkIn: '2026-10-09' }])).toBe(1);
+    expect(countStayChanges([row], [{ ...feed, checkOut: '2026-10-13' }])).toBe(1);
+    expect(countStayChanges([row], [{ ...feed, kind: 'blocked' }])).toBe(1);
+    expect(countStayChanges([row], [{ ...feed, reservationCode: null }])).toBe(1);
+  });
+
+  it('キャンセル済みが iCal に戻ってきたら数える', () => {
+    expect(countStayChanges([{ ...row, status: 'cancelled' }], [feed])).toBe(1);
+  });
+
+  it('iCal が空なら 0（キャンセル分は呼び出し側で足す）', () => {
+    expect(countStayChanges([row], [])).toBe(0);
+  });
+});
+
+describe('stayNights', () => {
+  it('チェックイン日からチェックアウト日までの泊数', () => {
+    expect(stayNights({ checkIn: '2026-10-10', checkOut: '2026-10-11' })).toBe(1);
+    expect(stayNights({ checkIn: '2026-10-10', checkOut: '2026-10-12' })).toBe(2);
+  });
+
+  it('月をまたいでも数えられる', () => {
+    expect(stayNights({ checkIn: '2026-10-30', checkOut: '2026-11-02' })).toBe(3);
+  });
+});
+
+describe('checkOutsOn', () => {
+  const date = '2026-10-12';
+
+  it('その日にチェックアウトする予約だけを、棟の順に並べる', () => {
+    const stays = [
+      stay({ id: 'b', propertyId: 'P2', checkIn: '2026-10-10', checkOut: date }),
+      stay({ id: 'a', propertyId: 'P1', checkIn: '2026-10-11', checkOut: date }),
+      stay({ id: 'x', propertyId: 'P1', checkIn: '2026-10-12', checkOut: '2026-10-14' }),
+      stay({ id: 'blk', propertyId: 'P3', kind: 'blocked', checkIn: '2026-10-10', checkOut: date }),
+    ];
+    expect(checkOutsOn(date, stays, ['P1', 'P2']).map((i) => i.stay.id)).toEqual(['a', 'b']);
+  });
+
+  it('同じ棟に同じ日のチェックインがあれば入れ替え', () => {
+    const stays = [
+      stay({ id: 'out', propertyId: 'P1', checkIn: '2026-10-10', checkOut: date }),
+      stay({ id: 'in', propertyId: 'P1', checkIn: date, checkOut: '2026-10-14' }),
+      stay({ id: 'other', propertyId: 'P2', checkIn: '2026-10-10', checkOut: date }),
+    ];
+    const result = checkOutsOn(date, stays, ['P1', 'P2']);
+    expect(result.find((i) => i.stay.id === 'out')?.isTurnover).toBe(true);
+    expect(result.find((i) => i.stay.id === 'other')?.isTurnover).toBe(false);
+  });
+});
+
+describe('rangeStayBars', () => {
+  it('月の範囲で、チェックイン日の真ん中からチェックアウト日の真ん中まで', () => {
+    const bars = rangeStayBars('2026-11-01', 30, [
+      stay({ id: 'a', checkIn: '2026-11-03', checkOut: '2026-11-04' }),
+    ]);
+    expect(bars.get('P1')).toEqual([
+      expect.objectContaining({ start: 2.5, end: 3.5, startsHere: true, endsHere: true }),
+    ]);
+  });
+
+  it('月をまたぐ宿泊は端で切り、続きであることを残す', () => {
+    const bars = rangeStayBars('2026-11-01', 30, [
+      stay({ id: 'prev', checkIn: '2026-10-30', checkOut: '2026-11-02' }),
+      stay({ id: 'next', checkIn: '2026-11-29', checkOut: '2026-12-03' }),
+    ]);
+    const [prev, next] = bars.get('P1') ?? [];
+    expect(prev).toMatchObject({ start: 0, end: 1.5, startsHere: false, endsHere: true });
+    expect(next).toMatchObject({ start: 28.5, end: 30, startsHere: true, endsHere: false });
+  });
+
+  it('範囲の外の宿泊は含めない', () => {
+    const bars = rangeStayBars('2026-11-01', 30, [
+      stay({ id: 'before', checkIn: '2026-10-20', checkOut: '2026-10-25' }),
+      stay({ id: 'after', checkIn: '2026-12-05', checkOut: '2026-12-07' }),
+    ]);
+    expect(bars.size).toBe(0);
   });
 });

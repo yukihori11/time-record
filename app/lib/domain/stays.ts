@@ -51,6 +51,44 @@ export function planCancellations(
   return { cancelIds: targets.map((row) => row.id), skipped: false };
 }
 
+export interface StoredStayRow {
+  icalUid: string;
+  kind: 'reserved' | 'blocked';
+  checkIn: string;
+  checkOut: string;
+  reservationCode: string | null;
+  status: 'active' | 'cancelled';
+}
+
+/**
+ * iCal を取り込んだとき、画面に見える内容が変わる件数を数える。
+ *
+ * 同期のたびにカレンダーを取り直すと、変化が無くても読み込みが走って
+ * 画面がちらつく。変わったときだけ取り直せるよう、新規・変更の件数を返す。
+ * キャンセルの件数は planCancellations の結果を呼び出し側で足す。
+ */
+export function countStayChanges(
+  stored: StoredStayRow[],
+  feed: { uid: string; kind: 'reserved' | 'blocked'; checkIn: string; checkOut: string; reservationCode: string | null }[]
+): number {
+  const byUid = new Map(stored.map((r) => [r.icalUid, r]));
+  let changed = 0;
+  for (const s of feed) {
+    const row = byUid.get(s.uid);
+    if (
+      !row ||
+      row.status !== 'active' ||
+      row.kind !== s.kind ||
+      row.checkIn !== s.checkIn ||
+      row.checkOut !== s.checkOut ||
+      row.reservationCode !== s.reservationCode
+    ) {
+      changed++;
+    }
+  }
+  return changed;
+}
+
 // ------------------------------------------------------------
 // チェックイン当日の清掃
 // ------------------------------------------------------------
@@ -124,7 +162,7 @@ export function staysOnDate(stays: Stay[], date: string) {
 
 export interface StayBar {
   stay: Stay;
-  /** 週の左端からの位置（0〜7。1が1日分） */
+  /** 範囲の左端からの位置（週なら0〜7。1が1日分） */
   start: number;
   end: number;
   /** この週の中でチェックインするか（帯の左端に印を付ける） */
@@ -143,19 +181,32 @@ export function weekStayBars(
   weekStart: string,
   stays: Stay[]
 ): Map<string, StayBar[]> {
+  return rangeStayBars(weekStart, 7, stays);
+}
+
+/**
+ * 任意の日数の範囲で帯の位置を棟ごとに求める。
+ * 管理者向けの「棟ごとのタイムライン」は月の日数分を1行に並べるのに使う。
+ * start / end は範囲の左端からの日数（1が1日分）。
+ */
+export function rangeStayBars(
+  rangeStart: string,
+  days: number,
+  stays: Stay[]
+): Map<string, StayBar[]> {
   const result = new Map<string, StayBar[]>();
 
   for (const stay of stays) {
-    const rawStart = diffDays(weekStart, stay.checkIn) + 0.5;
-    const rawEnd = diffDays(weekStart, stay.checkOut) + 0.5;
-    if (rawEnd <= 0 || rawStart >= 7) continue;
+    const rawStart = diffDays(rangeStart, stay.checkIn) + 0.5;
+    const rawEnd = diffDays(rangeStart, stay.checkOut) + 0.5;
+    if (rawEnd <= 0 || rawStart >= days) continue;
 
     const bar: StayBar = {
       stay,
       start: Math.max(0, rawStart),
-      end: Math.min(7, rawEnd),
+      end: Math.min(days, rawEnd),
       startsHere: rawStart >= 0,
-      endsHere: rawEnd <= 7,
+      endsHere: rawEnd <= days,
     };
 
     const list = result.get(stay.propertyId);
@@ -250,6 +301,40 @@ export function checkInsOn(
       cleaning: cleaningStatus(stay, schedules, types, shifts),
       isTurnover: reserved.some(
         (o) => o.id !== stay.id && o.propertyId === stay.propertyId && o.checkOut === date
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        (order.get(a.stay.propertyId) ?? 99) - (order.get(b.stay.propertyId) ?? 99)
+    );
+}
+
+/** 何泊か。チェックアウト日はチェックイン日の翌日以降なので 1 以上になる */
+export function stayNights(stay: Pick<Stay, 'checkIn' | 'checkOut'>): number {
+  return diffDays(stay.checkIn, stay.checkOut);
+}
+
+export interface CheckOutItem {
+  stay: Stay;
+  /** 同じ棟に同じ日に次の客が入る（清掃できる時間が短い） */
+  isTurnover: boolean;
+}
+
+/** 指定日のチェックアウトを、入れ替えの有無つきで棟の順に並べる */
+export function checkOutsOn(
+  date: string,
+  stays: Stay[],
+  propertyOrder: string[]
+): CheckOutItem[] {
+  const reserved = stays.filter((s) => s.kind === 'reserved');
+  const order = new Map(propertyOrder.map((id, i) => [id, i]));
+
+  return reserved
+    .filter((s) => s.checkOut === date)
+    .map((stay) => ({
+      stay,
+      isTurnover: reserved.some(
+        (o) => o.id !== stay.id && o.propertyId === stay.propertyId && o.checkIn === date
       ),
     }))
     .sort(

@@ -15,7 +15,7 @@ import {
 } from '@/app/lib/api/mappers';
 import { calcMonthlySalary, DEFAULT_SETTINGS } from '@/app/lib/domain/payroll';
 import { addDays, monthRange, todayJst } from '@/app/lib/domain/datetime';
-import { checkInsOn } from '@/app/lib/domain/stays';
+import { checkInsOn, checkOutsOn } from '@/app/lib/domain/stays';
 import { log } from '@/app/lib/api/logger';
 import AdminDashboard from './AdminDashboard';
 
@@ -50,10 +50,11 @@ async function loadDashboard() {
     nearSchedulesRes,
     nearShiftsRes,
   ] = await Promise.all([
+    // 給与はスタッフだけを数えるが、今日の予定の担当者には
+    // 管理者が入ることもあるので全員を取る
     supabase
       .from('users')
-      .select('id, name, email')
-      .eq('role', 'staff')
+      .select('id, name, email, role')
       .order('name'),
     supabase
       .from('work_sessions')
@@ -127,6 +128,7 @@ async function loadDashboard() {
   const now = new Date();
 
   const salaries = (usersRes.data ?? [])
+    .filter((u) => u.role === 'staff')
     .map((u) => {
       const sessions = allSessions.filter((s) => s.userId === u.id);
       if (sessions.length === 0) return null;
@@ -152,10 +154,18 @@ async function loadDashboard() {
     schedules: (reservationsRes.data ?? []).map(toSchedule),
     properties,
     types,
-    checkIns: {
-      today: { date: today, items: checkInsOn(today, stays, nearSchedules, types, nearShifts, propertyOrder) },
-      tomorrow: { date: tomorrow, items: checkInsOn(tomorrow, stays, nearSchedules, types, nearShifts, propertyOrder) },
-    },
+    // 宿泊は今日・明日に関わる分を取ってあるので、出る側もここから拾える
+    stayDays: [today, tomorrow].map((date) => ({
+      date,
+      checkIns: checkInsOn(date, stays, nearSchedules, types, nearShifts, propertyOrder),
+      checkOuts: checkOutsOn(date, stays, propertyOrder),
+    })),
+    /** 今日の予定の担当者を出すため */
+    users: (usersRes.data ?? []).map((u) => ({
+      id: u.id as string,
+      name: (u.name as string | null) ?? '',
+      email: u.email as string,
+    })),
     shifts: (shiftsRes.data ?? []).map(toShift),
     staleCount: allSessions.filter(
       (s) => s.clockOut === null && s.clockIn.getTime() < twelveHoursAgo

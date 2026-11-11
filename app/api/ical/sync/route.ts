@@ -26,9 +26,11 @@ export const POST = withLogging('ical.sync', async (request: Request, _route, ct
     ctx.addFields({ force, feeds: results.length });
 
     const synced = results.filter((r) => r.ok).length;
+    // 画面はこれが 1 以上のときだけ取り直す
+    const changed = results.reduce((sum, r) => sum + r.changed, 0);
 
-    if (!isAdmin) return NextResponse.json({ synced });
-    return NextResponse.json({ synced, results });
+    if (!isAdmin) return NextResponse.json({ synced, changed });
+    return NextResponse.json({ synced, changed, results });
   } catch (error) {
     return errorResponse(error);
   }

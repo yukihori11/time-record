@@ -24,6 +24,7 @@ const MENU = [
   { href: '/admin/attendance', label: '勤怠管理', icon: '⏱', desc: '打刻の確認・修正' },
   { href: '/admin/wages', label: '時給設定', icon: '💰', desc: 'スタッフごとの時給' },
   { href: '/admin/salary', label: '給与集計', icon: '📊', desc: '月次の支給額' },
+  { href: '/admin/analytics', label: '分析', icon: '📈', desc: '稼働率・人件費の推移' },
   { href: '/admin/settings', label: '設定', icon: '⚙', desc: '給与ルール・棟・権限' },
 ];
 

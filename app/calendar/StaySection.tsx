@@ -35,7 +35,16 @@ export default function StaySection({
   onCreateCleaning: (propertyId: string, date: string) => void;
   onChanged: () => void;
 }) {
-  const { checkIns, staying, checkOuts, blocks } = staysOnDate(stays, date);
+  // 取り込んだ順のままだと棟の並びがばらばらになる。
+  // ホームと同じく、設定画面の棟の順に揃える
+  const order = new Map(properties.map((p, i) => [p.id, i]));
+  const byProperty = (list: Stay[]) =>
+    [...list].sort((a, b) => (order.get(a.propertyId) ?? 99) - (order.get(b.propertyId) ?? 99));
+  const moves = staysOnDate(stays, date);
+  const checkIns = byProperty(moves.checkIns);
+  const staying = byProperty(moves.staying);
+  const checkOuts = byProperty(moves.checkOuts);
+  const blocks = byProperty(moves.blocks);
   if (checkIns.length + staying.length + checkOuts.length + blocks.length === 0) {
     return null;
   }

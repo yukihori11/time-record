@@ -28,7 +28,15 @@ export function Field({ label, hint, required, children }: LabelProps) {
 }
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`${BASE} ${props.className ?? ''}`} />;
+  // iPhone の Safari は日付・時刻の入力欄に独自の最小幅と見た目を持たせるため、
+  // 横に並べると枠からはみ出す。標準の見た目を外して幅を枠に合わせる
+  const isDateLike = props.type === 'date' || props.type === 'time' || props.type === 'datetime-local';
+  return (
+    <input
+      {...props}
+      className={`${BASE} min-w-0 ${isDateLike ? 'appearance-none min-h-[50px] text-left' : ''} ${props.className ?? ''}`}
+    />
+  );
 }
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {

@@ -19,14 +19,6 @@ interface SalaryRow {
   salary: MonthlySalary;
 }
 
-const MENU = [
-  { href: '/calendar', label: '予定とシフト', icon: '📅', desc: '予約作成時に割当' },
-  { href: '/admin/attendance', label: '勤怠管理', icon: '⏱', desc: '打刻の確認・修正' },
-  { href: '/admin/wages', label: '時給設定', icon: '💰', desc: 'スタッフごとの時給' },
-  { href: '/admin/salary', label: '給与集計', icon: '📊', desc: '月次の支給額' },
-  { href: '/admin/analytics', label: '分析', icon: '📈', desc: '稼働率・人件費の推移' },
-  { href: '/admin/settings', label: '設定', icon: '⚙', desc: '給与ルール・棟・権限' },
-];
 
 interface DashboardData {
   salaries: SalaryRow[];
@@ -246,22 +238,6 @@ export default function AdminDashboard({
         )}
       </Card>
 
-      {/* メニュー */}
-      <div className="grid grid-cols-2 gap-3">
-        {MENU.map((item) => (
-          <Link key={item.href} href={item.href}>
-            <Card className="p-4 h-full hover:border-blue-300 transition-colors">
-              <span className="text-2xl" aria-hidden>
-                {item.icon}
-              </span>
-              <p className="font-bold text-slate-900 mt-2 text-sm">
-                {item.label}
-              </p>
-              <p className="text-xs text-slate-500 mt-0.5">{item.desc}</p>
-            </Card>
-          </Link>
-        ))}
-      </div>
     </div>
   );
 }

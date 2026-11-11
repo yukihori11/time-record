@@ -17,6 +17,7 @@ const ADMIN_ITEMS = [
   { href: '/calendar', label: '予定', icon: '📅' },
   { href: '/admin/attendance', label: '勤怠', icon: '⏱' },
   { href: '/admin/salary', label: '給与', icon: '¥' },
+  { href: '/admin/analytics', label: '分析', icon: '📈' },
   { href: '/admin/wages', label: '時給', icon: '💰' },
   { href: '/admin/settings', label: '設定', icon: '⚙' },
 ];

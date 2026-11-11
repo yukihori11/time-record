@@ -216,6 +216,11 @@ export interface Stay {
   /** 未記入なら null */
   guestCount: number | null;
   note: string | null;
+  /**
+   * 金額（円・ホストの受取額）。管理者にだけ付ける。未入力なら null。
+   * スタッフ向けの応答には含めない（undefined のまま）。
+   */
+  amount?: number | null;
 }
 
 /** 棟ごとの Airbnb 連携の状態（管理者向け） */

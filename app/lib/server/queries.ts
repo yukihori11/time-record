@@ -32,6 +32,7 @@ import {
 import { resolveWage } from '@/app/lib/domain/wage-history';
 import { monthRange, todayJst } from '@/app/lib/domain/datetime';
 import { scopeToStaff } from '@/app/lib/domain/stays';
+import { loadStayAmounts } from '@/app/lib/server/stay-amounts';
 import { log } from '@/app/lib/api/logger';
 
 /**
@@ -194,6 +195,17 @@ export const getCalendarData = cache(async (month: string) => {
   const allShifts = (shiftsRes.data ?? []).map(toShift) as Shift[];
   const allSchedules = (reservationsRes.data ?? []).map(toSchedule) as Schedule[];
   const allStays: Stay[] = stayRows.map(toStay);
+
+  // 金額は管理者にだけ付ける。表（0031）が無い環境では付けずに進む
+  if (isAdmin && allStays.length > 0) {
+    const { amounts, available } = await loadStayAmounts(
+      supabase,
+      allStays.map((s) => s.id)
+    );
+    if (available) {
+      for (const s of allStays) s.amount = amounts.get(s.id) ?? null;
+    }
+  }
 
   // スタッフには、自分にお願いされた分だけを返す。
   //   シフト  自分のもの

@@ -209,8 +209,18 @@ function StayItem({
                   onClick={() => setEditing(true)}
                   className="text-xs font-semibold text-blue-600 hover:text-blue-700"
                 >
-                  ✎ 人数・メモを入力
+                  ✎ 人数・金額・メモを入力
                 </button>
+                {/* 金額は管理者にだけ届く。予約（ブロック以外）にだけ出す */}
+                {stay.amount !== undefined && stay.kind === 'reserved' && (
+                  <span
+                    className={`text-xs font-bold tabular-nums ${
+                      stay.amount === null ? 'text-slate-400' : 'text-slate-700'
+                    }`}
+                  >
+                    {stay.amount === null ? '金額 未入力' : `¥${stay.amount.toLocaleString('ja-JP')}`}
+                  </span>
+                )}
                 {stay.reservationCode && (
                   <span className="text-[11px] text-slate-400 tabular-nums">
                     {stay.reservationCode}
@@ -235,6 +245,11 @@ function GuestForm({
 }) {
   const [guestCount, setGuestCount] = useState(stay.guestCount ? String(stay.guestCount) : '');
   const [note, setNote] = useState(stay.note ?? '');
+  const [amount, setAmount] = useState(
+    stay.amount !== undefined && stay.amount !== null ? String(stay.amount) : ''
+  );
+  // 金額の表（0031）が無い環境では amount が付かない。そのときは欄を出さない
+  const canEditAmount = stay.amount !== undefined && stay.kind === 'reserved';
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -246,6 +261,7 @@ function GuestForm({
       await api.patch(`/api/stays/${stay.id}`, {
         guestCount: guestCount === '' ? null : Number(guestCount),
         note,
+        ...(canEditAmount ? { amount: amount === '' ? null : Number(amount) } : {}),
       });
       onDone();
     } catch (err) {
@@ -272,6 +288,27 @@ function GuestForm({
         </div>
         <span className="text-sm text-slate-600">名</span>
       </div>
+      {canEditAmount && (
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-600">¥</span>
+            <div className="w-40">
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={100000000}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="金額"
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">
+            Airbnb の予約ページの「ホストの受取額」。管理者にだけ表示され、分析の売上に使います
+          </p>
+        </div>
+      )}
       <Textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}

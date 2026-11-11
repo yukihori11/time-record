@@ -97,7 +97,8 @@ export default function WagesView() {
             </Select>
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* スマホでは縦に並べる。日付の入力欄が横幅を取るため */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 [&>*]:min-w-0">
             <Field label="時給（円）" required>
               <Input
                 type="number"

@@ -370,10 +370,10 @@ function TimelineBar({
   }
 
   const mark = cleaning ? CLEANING_BADGE[cleaning] : null;
-  // 印はチェックイン（＝清掃の日）がまだ来ていない宿泊にだけ出す。
   // 過ぎた日の「未手配」は対応しようがないので消す。
-  // 手配が済んでいれば ✅ を出し、スタッフが決まっていることも分かるようにする
-  const showMark = bar.startsHere && mark && stay.checkIn >= todayJst();
+  // 清掃OK・担当未確定は、過ぎた日でも記録として残す
+  const showMark =
+    bar.startsHere && mark && (cleaning !== 'missing' || stay.checkIn >= todayJst());
   const target = bar.startsHere ? stay.checkIn : null;
   const selectable = target !== null && target.startsWith(month);
 

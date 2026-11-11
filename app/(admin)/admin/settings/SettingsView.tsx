@@ -17,6 +17,12 @@ import Button from '@/app/components/ui/Button';
 import { Field, Input, Select } from '@/app/components/ui/Field';
 import NotificationStatus from '@/app/components/NotificationStatus';
 import {
+  resetCalendarPrefs,
+  setCalendarPref,
+  useCalendarPrefs,
+  type CalendarPrefs,
+} from '@/app/lib/client/calendar-prefs';
+import {
   Card,
   ErrorBanner,
   SuccessBanner,
@@ -313,6 +319,9 @@ export default function SettingsView() {
       {/* Airbnb のカレンダーの取り込み */}
       <IcalFeedSection properties={properties} />
 
+      {/* カレンダーで何を目立たせるか。この端末だけの設定 */}
+      <CalendarDisplaySection />
+
       {/* 予定の種別 */}
       <TypeSection types={types} onChanged={load} />
 
@@ -558,6 +567,88 @@ function PropertySection({
  * 棟ごとに Airbnb の「カレンダーをエクスポート」の URL を貼る。
  * URL を知っていれば誰でも予約日程を読めるため、管理者にだけ見せる。
  */
+/**
+ * カレンダーの表示。色は選ばせず、何を目立たせるかを ON/OFF で選ぶ。
+ * 人によって見やすさが違うので、この端末だけに保存する。
+ */
+const CALENDAR_PREF_ITEMS: {
+  key: keyof CalendarPrefs;
+  label: string;
+  sample?: React.ReactNode;
+}[] = [
+  {
+    key: 'fillCleaningDays',
+    label: '清掃に入る日を塗る',
+    sample: <span className="w-6 h-4 rounded bg-green-100 border border-green-200" />,
+  },
+  {
+    key: 'fillMultiCheckIn',
+    label: '2棟以上が重なる日を塗る',
+    sample: <span className="w-6 h-4 rounded bg-amber-100 border border-amber-200" />,
+  },
+  { key: 'fillPastDays', label: '過ぎた日も塗る' },
+  {
+    key: 'showCheckInDots',
+    label: '日付の横にチェックインする棟の点を出す',
+    sample: (
+      <span className="flex gap-0.5">
+        <span className="w-2 h-2 rounded-full bg-sky-500" />
+        <span className="w-2 h-2 rounded-full bg-rose-500" />
+      </span>
+    ),
+  },
+  { key: 'showGuestCount', label: '帯に人数を出す' },
+];
+
+function CalendarDisplaySection() {
+  const prefs = useCalendarPrefs();
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-bold text-slate-900">カレンダーの表示</h2>
+        <button
+          onClick={resetCalendarPrefs}
+          className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+        >
+          元に戻す
+        </button>
+      </div>
+      <p className="text-xs text-slate-500 mb-3">
+        目立たせるものを選べます。この端末だけに保存されます（スマホとパソコンは別々）。
+      </p>
+      <ul className="divide-y divide-slate-100">
+        {CALENDAR_PREF_ITEMS.map((item) => {
+          const on = prefs[item.key];
+          return (
+            <li key={item.key}>
+              <label className="flex items-center gap-3 py-2.5 cursor-pointer">
+                <span className="flex-1 min-w-0 text-sm text-slate-700">{item.label}</span>
+                {item.sample && (
+                  <span className={`shrink-0 flex items-center ${on ? '' : 'opacity-30'}`}>
+                    {item.sample}
+                  </span>
+                )}
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={on}
+                  onChange={(e) => setCalendarPref(item.key, e.target.checked)}
+                  className="sr-only peer"
+                />
+                <span
+                  aria-hidden
+                  className="shrink-0 relative w-11 h-6 rounded-full bg-slate-300 transition-colors peer-checked:bg-blue-600 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-400 after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-5"
+                />
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
 function IcalFeedSection({ properties }: { properties: Property[] }) {
   const [feeds, setFeeds] = useState<IcalFeedStatus[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});

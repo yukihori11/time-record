@@ -18,7 +18,8 @@ import {
 } from '@/app/lib/domain/stays';
 import { dayOfWeek, todayJst } from '@/app/lib/domain/datetime';
 import { formatDuration } from '@/app/lib/domain/format';
-import { CLEANING_BADGE, cleaningDotOf } from '@/app/components/StayBadges';
+import { useCalendarPrefs } from '@/app/lib/client/calendar-prefs';
+import { CLEANING_BADGE } from '@/app/components/StayBadges';
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -39,6 +40,8 @@ export const CLEANING_MARK: Record<CleaningStatus, { icon: string; label: string
 
 /** 日付の下に並べる、棟1つ分の帯の段の高さ（px） */
 const LANE_HEIGHT = 22;
+/** 日付の横に並べる棟の点の最大数 */
+const MAX_DOTS = 4;
 /** 日付の行の高さ（px） */
 const DATE_ROW_HEIGHT = 26;
 
@@ -90,6 +93,8 @@ export default function CalendarGrid({
   const shiftMap = shiftsByDate(shifts, users);
   const weeks = calendarWeeks(calendarCells(month));
   const checkIns = checkInsByDate(stays);
+  // 何を目立たせるか（設定 →「カレンダーの表示」。その端末だけの設定）
+  const prefs = useCalendarPrefs();
 
 
   return (
@@ -149,14 +154,16 @@ export default function CalendarGrid({
                   const checkInProperties = new Set(dayCheckIns.map((s) => s.propertyId));
                   // 2棟以上で同じ日にチェックインがある日は、清掃が重なるので目立たせる
                   const isMultiCheckIn = checkInProperties.size >= 2;
-                  // チェックインがある日＝清掃が必要な日。点で示し、色は手配の状況
-                  const cleaningDot =
-                    dayCheckIns.length === 0
-                      ? null
-                      : cleaningDotOf(
-                          dayCheckIns.map((s) => cleaning.get(s.id)),
-                          isPastDay
-                        );
+                  // チェックインがある日＝清掃が必要な日。チェックインする棟の色の点で示す。
+                  // 手配の状況は帯の先頭の印で分かるので、点には持たせない
+                  const checkInDots = prefs.showCheckInDots
+                    ? properties.filter((p) => checkInProperties.has(p.id))
+                    : [];
+                  // マスを塗るか。重なる日の黄色を切っても、清掃の日なら薄緑で塗る
+                  const canFill = !isPastDay || prefs.fillPastDays;
+                  const fillMulti = canFill && prefs.fillMultiCheckIn && isMultiCheckIn;
+                  const fillCleaning =
+                    canFill && prefs.fillCleaningDays && checkInProperties.size > 0;
 
                   return (
                     <button
@@ -171,9 +178,12 @@ export default function CalendarGrid({
                         ${
                           isSelected
                             ? 'bg-blue-50 ring-2 ring-inset ring-blue-500 z-[1]'
-                            : isMultiCheckIn
-                              ? 'bg-amber-50/70 hover:bg-amber-50'
-                              : 'hover:bg-slate-50'
+                            : fillMulti
+                              ? 'bg-amber-100 hover:bg-amber-200/70'
+                              : fillCleaning
+                                ? // 清掃に入る日（チェックインが1棟）。重なる日の黄色と見分ける
+                                  'bg-green-100 hover:bg-green-200/70'
+                                : 'hover:bg-slate-50'
                         }
                       `}
                     >
@@ -196,22 +206,28 @@ export default function CalendarGrid({
                         >
                           {dayNumber}
                         </span>
-                        <span className="flex items-center gap-0.5 pt-1">
-                          {isMultiCheckIn && (
-                            <span
-                              className="text-[9px] font-bold leading-none px-1 py-0.5 rounded bg-amber-500 text-white"
-                              title={`${checkInProperties.size}棟が同じ日にチェックイン`}
-                            >
-                              IN×{checkInProperties.size}
-                            </span>
-                          )}
-                          {cleaningDot && (
-                            <span
-                              className={`w-2 h-2 rounded-full ring-2 ${cleaningDot.className}`}
-                              title={`清掃の日（チェックイン ${dayCheckIns.length}件）：${cleaningDot.label}`}
-                            />
-                          )}
-                        </span>
+                        {checkInDots.length > 0 && (
+                          <span
+                            className={`flex flex-wrap justify-end content-start gap-0.5 pt-1 max-w-[60%] ${
+                              isPastDay ? 'opacity-40' : ''
+                            }`}
+                            title={`清掃の日（チェックイン：${checkInDots.map((p) => p.name).join('・')}）`}
+                          >
+                            {/* 棟が多い日は4つまで出し、残りは数で示す */}
+                            {checkInDots.slice(0, MAX_DOTS).map((p) => (
+                              <span
+                                key={p.id}
+                                className="w-2 h-2 rounded-full ring-1 ring-white"
+                                style={{ backgroundColor: p.color }}
+                              />
+                            ))}
+                            {checkInDots.length > MAX_DOTS && (
+                              <span className="text-[8px] font-bold leading-[8px] text-slate-500">
+                                +{checkInDots.length - MAX_DOTS}
+                              </span>
+                            )}
+                          </span>
+                        )}
                       </div>
 
                       {/* 帯の段のぶん空ける（帯は上に重ねて描く） */}
@@ -291,6 +307,7 @@ export default function CalendarGrid({
                       property={p}
                       cleaning={cleaning.get(bar.stay.id)}
                       month={month}
+                      showGuestCount={prefs.showGuestCount}
                       onSelect={onSelect}
                     />
                   ))}
@@ -309,12 +326,14 @@ function StayBarView({
   property,
   cleaning,
   month,
+  showGuestCount,
   onSelect,
 }: {
   bar: StayBar;
   property: Property;
   cleaning: CleaningStatus | undefined;
   month: string;
+  showGuestCount: boolean;
   onSelect: (date: string) => void;
 }) {
   const { stay } = bar;
@@ -351,10 +370,13 @@ function StayBarView({
   }
 
   const mark = cleaning ? CLEANING_MARK[cleaning] : null;
-  // 印はチェックイン（＝清掃の日）がまだ来ていない宿泊にだけ出す。
   // 過ぎた日の「未手配」は対応しようがないので消す。
-  // 手配が済んでいれば ✅ を出し、スタッフが決まっていることも分かるようにする
-  const showMark = bar.startsHere && mark && stay.checkIn >= todayJst();
+  // 清掃OK・担当未確定は、過ぎた日でも記録として残す
+  const showMark =
+    bar.startsHere && mark && (cleaning !== 'missing' || stay.checkIn >= todayJst());
+  const span = bar.end - bar.start;
+  // 半日分の帯に印と人数の両方は入らない。印があるときは人数を折り返した先に回す
+  const showCount = showGuestCount && (bar.startsHere ? span >= 1 || !showMark : true);
 
   return (
     <button
@@ -375,11 +397,11 @@ function StayBarView({
     >
       {showMark && <span className="shrink-0 text-[9px]">{mark.icon}</span>}
       <span className="truncate">
-        {/* 棟名は2日分以上の幅があるときだけ。1泊の帯では見切れるので人数を優先する */}
-        {bar.end - bar.start >= 1.8 && (
-          <span className={`mr-1 ${bar.startsHere ? '' : 'opacity-75'}`}>{property.name}</span>
-        )}
-        {bar.startsHere &&
+        {/* 棟は帯の色で見分ける（凡例と日付の詳細に棟名が出る）。帯には人数だけを出す */}
+        {/* 人数は、チェックインの側に入りきるならそこに出す。
+            土曜に入る宿泊は週末で折り返し、最初の帯が半日分しかないので、
+            折り返した先（次の週）の帯にも出す */}
+        {showCount &&
           (stay.guestCount ? (
             <span className="opacity-90">{stay.guestCount}名</span>
           ) : (

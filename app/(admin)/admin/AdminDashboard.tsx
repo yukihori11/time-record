@@ -8,11 +8,12 @@ import type {
 } from '@/app/types/domain';
 import { formatDateShort, todayJst } from '@/app/lib/domain/datetime';
 import type { CheckInItem, CheckOutItem } from '@/app/lib/domain/stays';
-import { airbnbReservationUrl } from '@/app/lib/domain/stays';
+import { AirbnbLink } from '@/app/calendar/StaySection';
 import { CLEANING_BADGE, GuestCount, MoveBadge, StayRange } from '@/app/components/StayBadges';
 import { formatYen } from '@/app/lib/domain/format';
 import { Card } from '@/app/components/ui/Feedback';
 import NotificationList from '@/app/components/NotificationList';
+import AirbnbReturnSheet from '@/app/components/AirbnbReturnSheet';
 
 interface SalaryRow {
   user: { id: string; name: string; email: string };
@@ -85,6 +86,8 @@ export default function AdminDashboard({
     <div className="space-y-4">
       {/* スタッフの回答など。通知を消しても後から確認できる */}
       <NotificationList />
+      {/* Airbnb の予約ページから戻ったら、その予約の人数・金額・メモの入力欄を出す */}
+      <AirbnbReturnSheet />
 
       {staleCount > 0 && (
         <Link href="/admin/attendance" className="block">
@@ -294,6 +297,7 @@ function StayDay({
                     <StayRange stay={stay} />
                   </p>
                 </div>
+                <AirbnbLink code={stay.reservationCode} stay={stay} property={property} compact />
               </li>
             );
           })}
@@ -301,7 +305,6 @@ function StayDay({
           {day.checkIns.map(({ stay, cleaning, isTurnover }) => {
             const property = propertyMap.get(stay.propertyId);
             const badge = CLEANING_BADGE[cleaning];
-            const url = airbnbReservationUrl(stay.reservationCode);
             return (
               <li
                 key={`in-${stay.id}`}
@@ -332,16 +335,7 @@ function StayDay({
                     {badge.icon} {badge.label}
                   </span>
                   {/* 人数は iCal に無いので、Airbnb の予約ページで確かめてもらう */}
-                  {url && (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] font-bold text-rose-600"
-                    >
-                      Airbnb ↗
-                    </a>
-                  )}
+                  <AirbnbLink code={stay.reservationCode} stay={stay} property={property} compact />
                 </div>
               </li>
             );

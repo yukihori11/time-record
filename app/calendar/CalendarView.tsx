@@ -23,6 +23,7 @@ import Button from '@/app/components/ui/Button';
 import CalendarGrid, { CLEANING_MARK } from './CalendarGrid';
 import PropertyTimeline from './PropertyTimeline';
 import DayDetail from './DayDetail';
+import AirbnbReturnSheet from '@/app/components/AirbnbReturnSheet';
 import ScheduleForm from './ScheduleForm';
 
 interface CalendarData {
@@ -247,6 +248,9 @@ export default function CalendarView({
     <div className="space-y-4 relative">
       <MonthNav month={month} onChange={handleMonthChange} />
 
+      {/* Airbnb の予約ページから戻ったら、その予約の人数・金額・メモの入力欄を出す */}
+      {isAdmin && <AirbnbReturnSheet onSaved={() => load(month, { silent: true })} />}
+
       <ErrorBanner message={error} />
 
       {isAdmin && (
@@ -358,20 +362,23 @@ export default function CalendarView({
               <LegendRow sample={<span className="w-8 h-2.5 rounded" style={{ backgroundImage: 'repeating-linear-gradient(135deg, #e2e8f0 0 4px, #f1f5f9 4px 8px)' }} />}>
                 ブロック（Airbnb で売り止め）
               </LegendRow>
-              <LegendRow sample={<span className="flex gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /><span className="w-2 h-2 rounded-full bg-amber-400" /><span className="w-2 h-2 rounded-full bg-emerald-500" /></span>}>
-                日付の横の点＝清掃の日（チェックインあり）。赤＝未手配・黄＝担当未確定・緑＝OK
+              <LegendRow sample={<span className="flex gap-0.5">{data.properties.slice(0, 3).map((p) => <span key={p.id} className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />)}</span>}>
+                日付の横の点＝その日にチェックインする棟（清掃の日）
               </LegendRow>
               <LegendRow sample={<span>{CLEANING_MARK.missing.icon}</span>}>
-                {CLEANING_MARK.missing.label}（帯の先頭）
+                {CLEANING_MARK.missing.label}（帯の先頭。過ぎた日は出さない）
               </LegendRow>
               <LegendRow sample={<span>{CLEANING_MARK.unassigned.icon}</span>}>
                 {CLEANING_MARK.unassigned.label}（帯の先頭）
               </LegendRow>
               <LegendRow sample={<span>{CLEANING_MARK.ready.icon}</span>}>
-                {CLEANING_MARK.ready.label}・担当が承諾済み（帯の先頭。過ぎた日は出さない）
+                {CLEANING_MARK.ready.label}・担当が承諾済み（帯の先頭）
               </LegendRow>
-              <LegendRow sample={<span className="px-1 rounded bg-amber-500 text-white font-bold text-[9px]">IN×2</span>}>
-                2棟以上が同じ日にチェックイン
+              <LegendRow sample={<span className="w-5 h-4 rounded bg-green-100 border border-green-200" />}>
+                緑の日＝清掃に入る日（1棟がチェックイン）
+              </LegendRow>
+              <LegendRow sample={<span className="w-5 h-4 rounded bg-amber-100 border border-amber-200" />}>
+                黄色の日＝2棟以上が同じ日にチェックイン
               </LegendRow>
               <LegendRow sample={<span className="w-[18px] h-[18px] rounded-full bg-emerald-500 text-white text-[10px] font-bold inline-flex items-center justify-center">田</span>}>
                 スタッフ（承諾）
@@ -394,6 +401,11 @@ export default function CalendarView({
                   {t.name}
                 </LegendRow>
               ))}
+              {isAdmin && (
+                <p className="pt-1.5 mt-0.5 border-t border-slate-100 text-slate-500">
+                  塗りや点は「設定 → カレンダーの表示」で ON/OFF できます
+                </p>
+              )}
             </div>
           </details>
         </div>

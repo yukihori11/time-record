@@ -5,6 +5,7 @@ import type { Property, Stay } from '@/app/types/domain';
 import type { CleaningStatus } from '@/app/lib/domain/stays';
 import { airbnbReservationUrl, staysOnDate } from '@/app/lib/domain/stays';
 import { api, errorMessage } from '@/app/lib/client/fetcher';
+import { rememberAirbnbVisit } from '@/app/lib/client/airbnb-return';
 import Button from '@/app/components/ui/Button';
 import { ErrorBanner } from '@/app/components/ui/Feedback';
 import { Input, Textarea } from '@/app/components/ui/Field';
@@ -166,7 +167,7 @@ function StayItem({
             <StayRange stay={stay} />
           </p>
         </div>
-        {isAdmin && <AirbnbLink code={stay.reservationCode} compact />}
+        {isAdmin && <AirbnbLink code={stay.reservationCode} stay={stay} property={property} compact />}
       </div>
 
       {(stay.note || (badge && cleaning) || isAdmin) && (
@@ -234,12 +235,16 @@ function StayItem({
   );
 }
 
-function GuestForm({
+/** 人数・金額・メモの入力欄。Airbnb から戻ったときのシートでも使う */
+export function GuestForm({
   stay,
+  autoFocus = false,
   onDone,
   onCancel,
 }: {
   stay: Stay;
+  /** 開いたらすぐ人数を打てるようにする */
+  autoFocus?: boolean;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -282,6 +287,7 @@ function GuestForm({
             min={1}
             max={100}
             value={guestCount}
+            autoFocus={autoFocus}
             onChange={(e) => setGuestCount(e.target.value)}
             placeholder="人数"
           />
@@ -328,12 +334,21 @@ function GuestForm({
   );
 }
 
-/** Airbnb の予約ページを開く。人数を確かめて入力するために使う */
+/**
+ * Airbnb の予約ページを開く。人数を確かめて入力するために使う。
+ *
+ * stay を渡すと、Airbnb から戻ったときにその予約の入力欄が開く
+ * （画面に AirbnbReturnSheet を置いておくこと）。
+ */
 export function AirbnbLink({
   code,
+  stay,
+  property,
   compact = false,
 }: {
   code: string | null;
+  stay?: Stay;
+  property?: { name: string; color?: string | null };
   /** 行の右端に置く小さい形 */
   compact?: boolean;
 }) {
@@ -344,6 +359,10 @@ export function AirbnbLink({
       href={url}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={() => {
+        // ブロックには人数も金額も無いので、戻っても何も出さない
+        if (stay && stay.kind === 'reserved') rememberAirbnbVisit(stay, property);
+      }}
       className={`shrink-0 inline-flex items-center gap-1 font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 ${
         compact ? 'text-[11px] px-2 py-1' : 'text-xs px-2.5 py-1.5'
       }`}

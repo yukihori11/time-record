@@ -17,6 +17,7 @@ import { calcMonthlySalary, DEFAULT_SETTINGS } from '@/app/lib/domain/payroll';
 import { addDays, monthRange, todayJst } from '@/app/lib/domain/datetime';
 import { checkInsOn, checkOutsOn } from '@/app/lib/domain/stays';
 import { log } from '@/app/lib/api/logger';
+import { loadStayAmounts } from '@/app/lib/server/stay-amounts';
 import AdminDashboard from './AdminDashboard';
 
 export const metadata = { title: '管理 | 民泊勤怠管理' };
@@ -114,6 +115,17 @@ async function loadDashboard() {
     log.warn('dashboard.stays_unavailable', { code: staysRes.error.code, message: staysRes.error.message });
   }
   const stays = staysRes.error ? [] : (staysRes.data ?? []).map(toStay);
+  // 金額も付ける。Airbnb から戻ったときの入力欄に、入力済みの金額を出すため。
+  // 表（0031）が無い環境では付けずに進む
+  if (stays.length > 0) {
+    const { amounts, available } = await loadStayAmounts(
+      supabase,
+      stays.map((s) => s.id)
+    );
+    if (available) {
+      for (const s of stays) s.amount = amounts.get(s.id) ?? null;
+    }
+  }
   const nearSchedules = (nearSchedulesRes.data ?? []).map(toSchedule);
   const nearShifts = (nearShiftsRes.data ?? []).map(toShift);
   const properties = (propertiesRes.data ?? []).map(toProperty);

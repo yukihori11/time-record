@@ -66,21 +66,3 @@ export function GuestCount({ count }: { count: number | null }) {
     </span>
   );
 }
-
-export const CLEANING_DOT = {
-  missing: { className: 'bg-red-500 ring-red-100', label: '清掃未手配' },
-  unassigned: { className: 'bg-amber-400 ring-amber-100', label: '担当未確定' },
-  ready: { className: 'bg-emerald-500 ring-emerald-100', label: '清掃OK' },
-  past: { className: 'bg-slate-300 ring-slate-100', label: '過ぎた日' },
-} as const;
-
-/** その日のチェックインのうち、一番手配が遅れている状態で点の色を決める */
-export function cleaningDotOf(
-  statuses: (CleaningStatus | undefined)[],
-  isPastDay: boolean
-): (typeof CLEANING_DOT)[keyof typeof CLEANING_DOT] {
-  if (isPastDay) return CLEANING_DOT.past;
-  if (statuses.some((s) => s === 'missing' || s === undefined)) return CLEANING_DOT.missing;
-  if (statuses.some((s) => s === 'unassigned')) return CLEANING_DOT.unassigned;
-  return CLEANING_DOT.ready;
-}
